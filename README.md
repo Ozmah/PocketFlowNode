@@ -4,7 +4,7 @@
 
 This application generates chapter-based tutorials for software codebases using Large Language Models (LLMs). It is a Node.js/TypeScript Express API that accepts a public GitHub repository URL and parameters, then produces a downloadable ZIP archive containing the tutorial in Markdown format.
 
-This project is a Node.js/TypeScript conversion and enhancement of the original Python-based "AI Codebase Knowledge Builder". (If you have a link to the original, add it here: `https://github.com/The-Pocket/PocketFlow-Tutorial-Codebase-Knowledge`)
+This project is a Node.js/TypeScript conversion and enhancement of the original Python-based "AI Codebase Knowledge Builder". (`https://github.com/The-Pocket/PocketFlow-Tutorial-Codebase-Knowledge`)
 
 ## Features
 
