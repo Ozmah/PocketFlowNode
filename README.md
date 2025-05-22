@@ -179,6 +179,30 @@ This command uses Jest to execute all unit tests located in the `tests` director
 
 Note: The `dist/` directory will be created when you build the project using `npm run build`. It contains the compiled JavaScript output and is gitignored.
 
+## Additional Prerequisites for Jekyll Integration
+
+-   **Ruby**: v3.1.0 or later (required for Jekyll)
+-   **Bundler**: Ruby gem manager (`gem install bundler`)
+-   **Jekyll**: Static site generator (`gem install jekyll`)
+
+### Windows Users:
+
+-   Download **Ruby+Devkit** from https://rubyinstaller.org/downloads/
+-   Ensure you select "WITH DEVKIT" version
+-   Run `ridk install` when prompted during installation
+
+### Linux/macOS Users:
+
+```bash
+# Install Ruby version manager (recommended)
+curl -sSL https://get.rvm.io | bash -s stable
+rvm install ruby-3.1.0
+rvm use ruby-3.1.0 --default
+
+# Install Jekyll and Bundler
+gem install jekyll bundler
+```
+
 ## Tutorial File Format
 
 Each tutorial chapter file must begin with YAML front matter (the content between the triple dashes). This front matter configures how Jekyll and the Just The Docs theme will process and display the page:
@@ -193,6 +217,8 @@ nav_order: 1
 has_children: true
 ---
 ```
+
+Front matter for the rest of the files:
 
 ```yaml
 ---
