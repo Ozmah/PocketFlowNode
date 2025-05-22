@@ -365,7 +365,7 @@ export async function crawlGitHubFiles(repoUrl: string, options: CrawlGitHubFile
 
 			if (axiosError.response?.status === 404) {
 				reason = `Resource not found (404): ${resourcePath} at ${apiUrl}. Message: ${
-					axiosError.response.data?.message || "N/A"
+					(axiosError.response?.data as { message?: string })?.message || "N/A"
 				}`;
 			} else if (axiosError.response?.status === 403) {
 				const rateLimitRemaining = axiosError.response.headers["x-ratelimit-remaining"];
