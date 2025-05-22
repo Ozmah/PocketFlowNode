@@ -1,7 +1,7 @@
 import yaml from 'js-yaml';
 import { FetchedFile } from '../utils/crawl_github_files';
-import { callLlm } from '../utils/llm';
 import { Abstraction, Relationship, ProjectAnalysis, AnalyzeRelationshipsOptions } from '../types';
+import { LlmProvider, LlmGenerationOptions } from '../llm/types';
 
 /**
  * Helper function to parse abstraction references like "0 # AbstractionName" or just "0"
@@ -38,6 +38,7 @@ export async function analyzeRelationships(
   abstractions: Abstraction[],
   filesData: FetchedFile[],
   projectName: string,
+  llmProvider: LlmProvider, // Nuevo parámetro
   options: AnalyzeRelationshipsOptions = {}
 ): Promise<ProjectAnalysis> {
   if (!abstractions || abstractions.length === 0) {
@@ -52,6 +53,7 @@ export async function analyzeRelationships(
   const {
     language = 'english',
     useCache = true,
+    llmOptions // Nuevo
   } = options;
 
   // 1. Create LLM Context
@@ -138,8 +140,12 @@ Now, please provide the YAML output.
 `;
 
   // 3. Call LLM
+  const finalLlmOptions: LlmGenerationOptions = {
+    ...(llmOptions || {}),
+    useCache: useCache,
+  };
   console.log(`Calling LLM to analyze relationships for project "${projectName}"...`);
-  const llmResponse = await callLlm(prompt, { useCache });
+  const llmResponse = await llmProvider.generateContent(prompt, finalLlmOptions);
 
   // 4. Parse and Validate Output
   let parsedResponse: any;

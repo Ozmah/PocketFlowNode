@@ -67,8 +67,9 @@ export interface Abstraction {
 
 export interface IdentifyAbstractionsOptions {
   language?: string; // For prompt instructions
-  useCache?: boolean; // For LLM calls
+  useCache?: boolean; // Se mantiene por ahora, se combinará con llmOptions
   maxAbstractions?: number; // To limit the number of abstractions identified
+  llmOptions?: LlmGenerationOptions; // Nuevo campo
 }
 
 // --- Interfaces for analyzeRelationships ---
@@ -89,7 +90,8 @@ export interface ProjectAnalysis {
 
 export interface AnalyzeRelationshipsOptions {
   language?: string; // For prompt instructions (summary, labels)
-  useCache?: boolean; // For LLM calls
+  useCache?: boolean; // Se mantiene por ahora
+  llmOptions?: LlmGenerationOptions; // Nuevo campo
 }
 
 // --- Interfaces for orderChapters ---
@@ -97,7 +99,8 @@ export interface AnalyzeRelationshipsOptions {
 
 export interface OrderChaptersOptions {
   language?: string; // For prompt context notes, as LLM deals with potentially translated names/summaries
-  useCache?: boolean; // For LLM calls
+  useCache?: boolean; // Se mantiene por ahora
+  llmOptions?: LlmGenerationOptions; // Nuevo campo
 }
 
 // --- Interfaces for writeChapters ---
@@ -113,7 +116,8 @@ export interface ChapterOutput {
 
 export interface WriteChaptersOptions {
   language?: string;
-  useCache?: boolean;
+  useCache?: boolean; // Se mantiene por ahora
+  llmOptions?: LlmGenerationOptions; // Nuevo campo
 }
 
 // Helper for chapter linking information

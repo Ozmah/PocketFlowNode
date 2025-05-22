@@ -1,4 +1,3 @@
-import { callLlm } from '../utils/llm';
 import {
   Abstraction,
   FetchedFile,
@@ -6,6 +5,7 @@ import {
   WriteChaptersOptions,
   ChapterLinkInfo,
 } from '../types';
+import { LlmProvider, LlmGenerationOptions } from '../llm/types';
 
 // Helper function to sanitize chapter names for filenames
 // Exported for testing purposes
@@ -33,6 +33,7 @@ export async function writeChapters(
   abstractions: Abstraction[],
   filesData: FetchedFile[],
   projectName: string,
+  llmProvider: LlmProvider, // Nuevo parámetro
   options: WriteChaptersOptions = {}
 ): Promise<ChapterOutput[]> {
   if (!chapterOrder || chapterOrder.length === 0) {
@@ -44,7 +45,11 @@ export async function writeChapters(
     return [];
   }
 
-  const { language = 'english', useCache = true } = options;
+  const { 
+    language = 'english', 
+    useCache = true, 
+    llmOptions // Nuevo
+  } = options;
 
   const chaptersWrittenSoFarSummary: string[] = []; // Stores summaries or full content for context
   const allChapterOutputs: ChapterOutput[] = [];
@@ -193,8 +198,22 @@ Start directly with the chapter heading.
         chapterContent = `# Chapter ${chapterNum}: ${abstractionName}\n\n${chapterContent}`;
     }
     // Add more cleanup if necessary, e.g., trimming whitespace
-
+    
     // Add to chaptersWrittenSoFarSummary (using full content for now, could be a summary later)
+    // Justo antes de: console.log(`Writing Chapter ${chapterNum}: "${abstractionName}" ...`);
+
+    const finalLlmOptions: LlmGenerationOptions = {
+      ...(llmOptions || {}),
+      useCache: useCache,
+    };
+    console.log(`Writing Chapter ${chapterNum}: "${abstractionName}" (Abstraction Index: ${abstractionIndex}) using LLM...`);
+    let chapterContent = await llmProvider.generateContent(prompt, finalLlmOptions);
+
+    // Basic validation/cleanup: Ensure heading is present (as per Python version)
+    if (!chapterContent.trim().startsWith('#')) {
+        console.warn(`LLM output for chapter ${chapterNum} ("${abstractionName}") did not start with a heading. Prepending a default one.`);
+        chapterContent = `# Chapter ${chapterNum}: ${abstractionName}\n\n${chapterContent}`;
+    }
     chaptersWrittenSoFarSummary.push(`## Summary of Chapter ${chapterNum}: ${abstractionName}\n${chapterContent.substring(0, 500)}...`); // Simple summary
 
     allChapterOutputs.push({

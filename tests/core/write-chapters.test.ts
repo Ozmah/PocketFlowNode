@@ -46,3 +46,97 @@ describe('sanitizeFilename', () => {
     expect(sanitizeFilename('Triple Digit', 123)).toMatch(/^123_/); // padStart(2, '0') will still result in '123'
   });
 });
+
+// Mock LlmProvider
+const mockGenerateContentWrite = jest.fn();
+const mockLlmProviderWrite: LlmProvider = {
+  providerType: 'gemini',
+  generateContent: mockGenerateContentWrite,
+};
+
+describe('writeChapters main function', () => {
+  const mockAbstractions: Abstraction[] = [
+    { name: 'Chapter One', description: 'First chapter desc', fileIndices: [0] },
+    { name: 'Chapter Two', description: 'Second chapter desc', fileIndices: [1] },
+  ];
+  const mockChapterOrder: number[] = [0, 1]; // Order of abstraction indices
+  const mockFilesData: FetchedFile[] = [
+    { path: 'file1.ts', content: 'content for file1' },
+    { path: 'file2.ts', content: 'content for file2' },
+  ];
+  const mockProjectName = 'MyTutorial';
+
+  beforeEach(() => {
+    mockGenerateContentWrite.mockReset();
+  });
+
+  test('should call LLM for each chapter and return ChapterOutput array', async () => {
+    mockGenerateContentWrite
+      .mockResolvedValueOnce('# Chapter 1: Chapter One\nContent for chapter one.')
+      .mockResolvedValueOnce('# Chapter 2: Chapter Two\nContent for chapter two.');
+
+    const options: WriteChaptersOptions = { language: 'english', useCache: true };
+    const result = await writeChapters(mockChapterOrder, mockAbstractions, mockFilesData, mockProjectName, mockLlmProviderWrite, options);
+
+    expect(mockGenerateContentWrite).toHaveBeenCalledTimes(2);
+    // Check call for first chapter
+    expect(mockGenerateContentWrite).toHaveBeenNthCalledWith(1, 
+      expect.stringContaining('This chapter focuses on the abstraction: "Chapter One"'), // Parte del prompt
+      expect.objectContaining({ useCache: true })
+    );
+    // Check call for second chapter
+    expect(mockGenerateContentWrite).toHaveBeenNthCalledWith(2,
+      expect.stringContaining('This chapter focuses on the abstraction: "Chapter Two"'), // Parte del prompt
+      expect.objectContaining({ useCache: true })
+    );
+
+    expect(result).toHaveLength(2);
+    expect(result[0]).toEqual(expect.objectContaining({
+      chapterNumber: 1,
+      abstractionIndex: 0,
+      title: 'Chapter One',
+      content: '# Chapter 1: Chapter One\nContent for chapter one.',
+      filename: '01_chapter_one.md'
+    }));
+    expect(result[1]).toEqual(expect.objectContaining({
+      chapterNumber: 2,
+      abstractionIndex: 1,
+      title: 'Chapter Two',
+      content: '# Chapter 2: Chapter Two\nContent for chapter two.',
+      filename: '02_chapter_two.md'
+    }));
+  });
+
+  test('should handle empty chapterOrder gracefully', async () => {
+    const result = await writeChapters([], mockAbstractions, mockFilesData, mockProjectName, mockLlmProviderWrite, {});
+    expect(result).toEqual([]);
+    expect(mockGenerateContentWrite).not.toHaveBeenCalled();
+  });
+
+  test('should prepend default heading if LLM output is missing it', async () => {
+    mockGenerateContentWrite.mockResolvedValueOnce('Content without heading.');
+    const result = await writeChapters([0], [mockAbstractions[0]], mockFilesData, mockProjectName, mockLlmProviderWrite, {});
+    expect(result[0].content).toMatch(/^# Chapter 1: Chapter One\n\nContent without heading./);
+  });
+  
+  test('should correctly pass LlmGenerationOptions from WriteChaptersOptions', async () => {
+    mockGenerateContentWrite.mockResolvedValueOnce('# Chapter 1: Test\nContent');
+    const specificLlmOptions: LlmGenerationOptions = { model: "gpt-4-custom", temperature: 0.1 };
+    const options: WriteChaptersOptions = {
+      useCache: false,
+      llmOptions: specificLlmOptions
+    };
+
+    await writeChapters([0], [mockAbstractions[0]], mockFilesData, mockProjectName, mockLlmProviderWrite, options);
+
+    expect(mockGenerateContentWrite).toHaveBeenCalledWith(
+      expect.any(String), // prompt
+      expect.objectContaining({
+        useCache: false,
+        model: "gpt-4-custom",
+        temperature: 0.1
+      })
+    );
+  });
+  // Añadir más tests
+});

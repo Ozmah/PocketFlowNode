@@ -1,7 +1,7 @@
 import yaml from 'js-yaml';
 import { FetchedFile } from '../utils/crawl_github_files'; // Assuming this is the correct path
-import { callLlm } from '../utils/llm';
 import { Abstraction, IdentifyAbstractionsOptions } from '../types'; // Assuming this is the correct path
+import { LlmProvider, LlmGenerationOptions } from '../llm/types';
 
 /**
  * Validates a single raw file index from the LLM output.
@@ -38,6 +38,7 @@ function validateFileIndex(rawIndex: any, maxIndex: number): number {
 export async function identifyAbstractions(
   filesData: FetchedFile[],
   projectName: string,
+  llmProvider: LlmProvider, // Nuevo parámetro
   options: IdentifyAbstractionsOptions = {}
 ): Promise<Abstraction[]> {
   if (!filesData || filesData.length === 0) {
@@ -47,8 +48,9 @@ export async function identifyAbstractions(
 
   const {
     language = 'english',
-    useCache = true,
+    useCache = true, // useCache se mantiene para construir finalLlmOptions
     maxAbstractions = 10,
+    llmOptions // Nuevo
   } = options;
 
   // 1. Create LLM Context
@@ -102,8 +104,14 @@ Now, please provide the YAML list of abstractions.
 `;
 
   // 3. Call LLM
+  const finalLlmOptions: LlmGenerationOptions = {
+    ...(llmOptions || {}), // Opciones genéricas pasadas (ej: model, temperature)
+    // useCache se pasa como una opción más; el proveedor (Gemini) sabrá qué hacer con ella.
+    // Para otros proveedores, podría ser ignorada si no es relevante.
+    useCache: useCache,
+  };
   console.log(`Calling LLM to identify abstractions for project "${projectName}"...`);
-  const llmResponse = await callLlm(prompt, { useCache });
+  const llmResponse = await llmProvider.generateContent(prompt, finalLlmOptions);
 
   // 4. Parse and Validate Output
   let rawAbstractions: any;

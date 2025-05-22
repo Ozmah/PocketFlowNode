@@ -50,88 +50,152 @@ interface GenerateTutorialRequestBody {
 	language?: string;
 	useCache?: boolean;
 	maxAbstractions?: number;
+	llmProvider?: LlmProviderType;
+	llmApiKey?: string;
+	llmModel?: string;
+	llmOptions?: LlmGenerationOptions; 
 }
 
 app.post("/generate-tutorial", async (req: Request, res: Response) => {
-	const requestBody = req.body as GenerateTutorialRequestBody;
-	console.log(`${LOG_PREFIX} Processing new tutorial request for repo: ${requestBody.repoUrl}`);
+	const {
+		repoUrl,
+		projectName,
+		githubToken,
+		includePatterns,
+		excludePatterns,
+		maxFileSize,
+		language,
+		useCache,
+		maxAbstractions,
+		llmProvider: requestedLlmProvider,
+		llmApiKey,
+		llmModel,
+		llmOptions
+	  } = req.body as GenerateTutorialRequestBody;
+	console.log(`${LOG_PREFIX} Processing new tutorial request for repo: ${repoUrl}`);
 
 	// --- Input validation ---
-	if (!requestBody.repoUrl || typeof requestBody.repoUrl !== "string") {
+	if (!repoUrl || typeof repoUrl !== "string") {
 		return res.status(400).send("repoUrl is required and must be a string.");
 	}
 	try {
-		new URL(requestBody.repoUrl);
+		new URL(repoUrl);
 	} catch (error) {
 		return res.status(400).send("repoUrl must be a valid URL.");
 	}
 	// ... (keep other validations as they are) ...
 	if (
-		requestBody.projectName !== undefined &&
-		(typeof requestBody.projectName !== "string" || requestBody.projectName.trim() === "")
+		projectName !== undefined &&
+		(typeof projectName !== "string" || projectName.trim() === "")
 	) {
 		return res.status(400).send("projectName must be a non-empty string if provided.");
 	}
 	if (
-		requestBody.githubToken !== undefined &&
-		(typeof requestBody.githubToken !== "string" || requestBody.githubToken.trim() === "")
+		githubToken !== undefined &&
+		(typeof githubToken !== "string" || githubToken.trim() === "")
 	) {
 		return res.status(400).send("githubToken must be a non-empty string if provided.");
 	}
 	if (
-		requestBody.includePatterns !== undefined &&
-		(!Array.isArray(requestBody.includePatterns) ||
-			!requestBody.includePatterns.every((p) => typeof p === "string"))
+		includePatterns !== undefined &&
+		(!Array.isArray(includePatterns) ||
+			!includePatterns.every((p) => typeof p === "string"))
 	) {
 		return res.status(400).send("includePatterns must be an array of strings if provided.");
 	}
 	if (
-		requestBody.excludePatterns !== undefined &&
-		(!Array.isArray(requestBody.excludePatterns) ||
-			!requestBody.excludePatterns.every((p) => typeof p === "string"))
+		excludePatterns !== undefined &&
+		(!Array.isArray(excludePatterns) ||
+			!excludePatterns.every((p) => typeof p === "string"))
 	) {
 		return res.status(400).send("excludePatterns must be an array of strings if provided.");
 	}
 	if (
-		requestBody.maxFileSize !== undefined &&
-		(typeof requestBody.maxFileSize !== "number" ||
-			requestBody.maxFileSize <= 0 ||
-			!Number.isInteger(requestBody.maxFileSize))
+		maxFileSize !== undefined &&
+		(typeof maxFileSize !== "number" ||
+			maxFileSize <= 0 ||
+			!Number.isInteger(maxFileSize))
 	) {
 		return res.status(400).send("maxFileSize must be a positive integer if provided.");
 	}
 	if (
-		requestBody.language !== undefined &&
-		(typeof requestBody.language !== "string" || requestBody.language.trim() === "")
+		language !== undefined &&
+		(typeof language !== "string" || language.trim() === "")
 	) {
 		return res.status(400).send("language must be a non-empty string if provided.");
 	}
-	if (requestBody.useCache !== undefined && typeof requestBody.useCache !== "boolean") {
+	if (useCache !== undefined && typeof useCache !== "boolean") {
 		return res.status(400).send("useCache must be a boolean if provided.");
 	}
 	if (
-		requestBody.maxAbstractions !== undefined &&
-		(typeof requestBody.maxAbstractions !== "number" ||
-			requestBody.maxAbstractions <= 0 ||
-			!Number.isInteger(requestBody.maxAbstractions))
+		maxAbstractions !== undefined &&
+		(typeof maxAbstractions !== "number" ||
+			maxAbstractions <= 0 ||
+			!Number.isInteger(maxAbstractions))
 	) {
 		return res.status(400).send("maxAbstractions must be a positive integer if provided.");
+	}
+
+	// LLM related field validations
+	if (requestedLlmProvider !== undefined && !['gemini', 'claude', 'openai'].includes(requestedLlmProvider)) {
+		return res.status(400).send("llmProvider must be one of 'gemini', 'claude', or 'openai' if provided.");
+	}
+	if (llmApiKey !== undefined && (typeof llmApiKey !== "string" || llmApiKey.trim() === "")) {
+		return res.status(400).send("llmApiKey must be a non-empty string if provided.");
+	}
+	if (llmModel !== undefined && (typeof llmModel !== "string" || llmModel.trim() === "")) {
+		return res.status(400).send("llmModel must be a non-empty string if provided.");
+	}
+	if (llmOptions !== undefined && typeof llmOptions !== "object") {
+		return res.status(400).send("llmOptions must be an object if provided.");
 	}
 	// --- End of Input Validation ---
 
 	const sharedData: SharedData = {
-		repoUrl: requestBody.repoUrl,
-		projectName: requestBody.projectName || new URL(requestBody.repoUrl).pathname.split("/").pop() || "NewProject",
-		githubToken: requestBody.githubToken,
-		includePatterns: requestBody.includePatterns,
-		excludePatterns: requestBody.excludePatterns,
-		maxFileSize: requestBody.maxFileSize !== undefined ? requestBody.maxFileSize : 1024 * 1024,
-		language: requestBody.language !== undefined ? requestBody.language : "english",
-		useCache: requestBody.useCache !== undefined ? requestBody.useCache : true,
-		maxAbstractions: requestBody.maxAbstractions !== undefined ? requestBody.maxAbstractions : 15,
+		repoUrl: repoUrl,
+		projectName: projectName || new URL(repoUrl).pathname.split("/").pop() || "NewProject",
+		githubToken: githubToken,
+		includePatterns: includePatterns,
+		excludePatterns: excludePatterns,
+		maxFileSize: maxFileSize !== undefined ? maxFileSize : 1024 * 1024,
+		language: language !== undefined ? language : "english",
+		useCache: useCache !== undefined ? useCache : true, // This useCache is for the tutorial generation steps
+		maxAbstractions: maxAbstractions !== undefined ? maxAbstractions : 15,
+		// Note: llmProvider, llmApiKey, llmModel, llmOptions from request body are not directly part of SharedData here.
+		// They are used to instantiate the LLM provider instance below.
+		// The llmOptions from request might influence individual LLM calls if passed through.
 	};
 
 	console.log(`${LOG_PREFIX} Starting tutorial generation for project: ${sharedData.projectName}`);
+	
+	// Instantiate LLM Provider
+	const defaultLlmProvider: LlmProviderType = 'gemini'; // For backward compatibility
+	const providerType = requestedLlmProvider || defaultLlmProvider;
+
+	const providerConfig: LlmProviderConfig = {
+	  apiKey: llmApiKey, // The factory will use the environment variable if this is undefined
+	  modelName: llmModel,
+	};
+
+	let llmProviderInstance;
+	try {
+	  llmProviderInstance = createLlmProvider(providerType, providerConfig);
+	  console.log(`${LOG_PREFIX} Using LLM Provider: ${providerType} (Model: ${llmModel || 'default'}) for tutorial generation.`);
+	} catch (error: any) {
+	  console.error(`${LOG_PREFIX} Failed to instantiate LLM provider ${providerType}:`, error);
+	  return res.status(500).json({
+		message: `Failed to initialize LLM provider ${providerType}. Check server logs.`,
+		error: error.message,
+	  });
+	}
+
+	// Preparar las opciones LLM para las funciones del core
+    const coreLlmGenerationOptions: LlmGenerationOptions = {
+      ...(llmOptions || {}), // Opciones directas del request (ej: model, temperature)
+      // useCache se obtiene de sharedData, que a su vez lo toma de requestBody.useCache o default true
+      // Esto asegura que el useCache global del tutorial se respete si no hay un useCache específico en llmOptions
+      useCache: sharedData.useCache,
+    };
 
 	try {
 		// 1. Fetch Repository Files
@@ -160,12 +224,14 @@ app.post("/generate-tutorial", async (req: Request, res: Response) => {
 		console.log(`${LOG_PREFIX} Step 2: Identifying abstractions for ${sharedData.projectName}`);
 		const identifyOptions: IdentifyAbstractionsOptions = {
 			language: sharedData.language,
-			useCache: sharedData.useCache,
+			// useCache ya está incorporado en coreLlmGenerationOptions
 			maxAbstractions: sharedData.maxAbstractions,
+			llmOptions: coreLlmGenerationOptions, // Pasar las opciones LLM combinadas
 		};
 		const identifiedAbstractions: Abstraction[] = await identifyAbstractions(
-			sharedData.files,
+			sharedData.files!, // Asumiendo que files no será undefined aquí debido a chequeos previos
 			sharedData.projectName!,
+			llmProviderInstance, // Pasar la instancia del proveedor
 			identifyOptions
 		);
 		sharedData.abstractions = identifiedAbstractions;
@@ -181,12 +247,14 @@ app.post("/generate-tutorial", async (req: Request, res: Response) => {
 		console.log(`${LOG_PREFIX} Step 3: Analyzing relationships for ${sharedData.projectName}`);
 		const analyzeOptions: AnalyzeRelationshipsOptions = {
 			language: sharedData.language,
-			useCache: sharedData.useCache,
+			// useCache ya está incorporado en coreLlmGenerationOptions
+			llmOptions: coreLlmGenerationOptions,
 		};
 		const analysisResult: ProjectAnalysis = await analyzeRelationships(
 			sharedData.abstractions,
 			sharedData.files,
 			sharedData.projectName!,
+			llmProviderInstance, // Pasar la instancia del proveedor
 			analyzeOptions
 		);
 		sharedData.relationships = analysisResult.relationships;
@@ -198,12 +266,14 @@ app.post("/generate-tutorial", async (req: Request, res: Response) => {
 		console.log(`${LOG_PREFIX} Step 4: Ordering chapters for ${sharedData.projectName}`);
 		const orderOptions: OrderChaptersOptions = {
 			language: sharedData.language,
-			useCache: sharedData.useCache,
+			// useCache ya está incorporado en coreLlmGenerationOptions
+			llmOptions: coreLlmGenerationOptions,
 		};
 		sharedData.chapterOrder = await orderChapters(
 			sharedData.abstractions,
-			analysisResult,
+			analysisResult, // analysisResult ya está disponible desde el paso anterior
 			sharedData.projectName!,
+			llmProviderInstance, // Pasar la instancia del proveedor
 			orderOptions
 		);
 		console.log(`${LOG_PREFIX} Chapter order determined: ${sharedData.chapterOrder?.join(", ")}`);
@@ -212,13 +282,15 @@ app.post("/generate-tutorial", async (req: Request, res: Response) => {
 		console.log(`${LOG_PREFIX} Step 5: Writing chapters for ${sharedData.projectName}`);
 		const writeOptions: WriteChaptersOptions = {
 			language: sharedData.language,
-			useCache: sharedData.useCache,
+			// useCache ya está incorporado en coreLlmGenerationOptions
+			llmOptions: coreLlmGenerationOptions,
 		};
 		const chaptersOutput: ChapterOutput[] = await writeChapters(
 			sharedData.chapterOrder,
 			sharedData.abstractions,
 			sharedData.files,
 			sharedData.projectName!,
+			llmProviderInstance, // Pasar la instancia del proveedor
 			writeOptions
 		);
 		sharedData.chapters = chaptersOutput;
@@ -254,7 +326,7 @@ app.post("/generate-tutorial", async (req: Request, res: Response) => {
 		res.send(zipBuffer);
 		console.log(`${LOG_PREFIX} Tutorial generation successful for ${requestBody.repoUrl}. Sending ZIP.`);
 	} catch (error: any) {
-		console.error(`${LOG_PREFIX} Error during tutorial generation process for repo: ${requestBody.repoUrl}`, error);
+		console.error(`${LOG_PREFIX} Error during tutorial generation process for repo: ${repoUrl}`, error);
 		res.status(500).json({
 			message: "An internal server error occurred during tutorial generation.",
 			// error: error.message, // Avoid sending detailed error messages to client in production
@@ -264,42 +336,49 @@ app.post("/generate-tutorial", async (req: Request, res: Response) => {
 });
 
 app.post("/llm/generate", async (req: Request, res: Response) => {
-  const requestBody = req.body as LlmGenerateRequestBody;
+  const {
+	provider: requestedLlmProvider, // Renaming to avoid conflict if we use 'provider' later
+	prompt,
+	apiKey: llmApiKey, // Standardizing variable names for keys/models/options
+	model: llmModel,
+	options: llmOptions
+  } = req.body as LlmGenerateRequestBody;
   const LOG_LLM_PREFIX = "[LLM Service]";
 
   // --- Input validation ---
-  if (!requestBody.provider || typeof requestBody.provider !== "string") {
+  if (!requestedLlmProvider || typeof requestedLlmProvider !== "string") {
     return res.status(400).send("provider is required and must be a string (e.g., 'gemini', 'claude', 'openai').");
   }
-  if (!requestBody.prompt || typeof requestBody.prompt !== "string") {
+  if (!prompt || typeof prompt !== "string") {
     return res.status(400).send("prompt is required and must be a string.");
   }
-  if (requestBody.apiKey !== undefined && typeof requestBody.apiKey !== "string") {
+  if (llmApiKey !== undefined && typeof llmApiKey !== "string") {
     return res.status(400).send("apiKey must be a string if provided.");
   }
-  if (requestBody.model !== undefined && typeof requestBody.model !== "string") {
+  if (llmModel !== undefined && typeof llmModel !== "string") {
     return res.status(400).send("model must be a string if provided.");
   }
   // Basic validation for options if provided
-  if (requestBody.options !== undefined && typeof requestBody.options !== 'object') {
+  if (llmOptions !== undefined && typeof llmOptions !== 'object') {
     return res.status(400).send("options must be an object if provided.");
   }
 
-  console.log(`${LOG_LLM_PREFIX} Received request for provider: ${requestBody.provider}, model: ${requestBody.model || 'default'}`);
+  console.log(`${LOG_LLM_PREFIX} Received request for provider: ${requestedLlmProvider}, model: ${llmModel || 'default'}`);
 
   try {
     // Prepare provider configuration
     const providerConfig: LlmProviderConfig = {
-      apiKey: requestBody.apiKey, // Pass it to the factory; factory will check env if this is undefined
-      modelName: requestBody.model, // Pass model to factory for default, can be overridden in generateContent options
+      apiKey: llmApiKey, // Pass it to the factory; factory will check env if this is undefined
+      modelName: llmModel, // Pass model to factory for default, can be overridden in generateContent options
     };
 
-    const llmProvider = createLlmProvider(requestBody.provider, providerConfig);
+    const llmProvider = createLlmProvider(requestedLlmProvider, providerConfig);
 
     // Prepare generation options
+    // Note: The endpoint logic for /llm/generate already correctly prioritizes requestBody.model over options.model
     const generationOptions: LlmGenerationOptions = {
-      ...requestBody.options, // User-provided options (temperature, maxTokens etc.)
-      model: requestBody.model || requestBody.options?.model, // Explicit model in request body takes precedence
+      ...llmOptions, // User-provided options (temperature, maxTokens etc.)
+      model: llmModel || llmOptions?.model, // Explicit model in request body takes precedence
     };
     
     // Remove model from options if it's undefined to avoid sending `model: undefined` to providers
@@ -307,16 +386,16 @@ app.post("/llm/generate", async (req: Request, res: Response) => {
         delete generationOptions.model;
     }
 
-    console.log(`${LOG_LLM_PREFIX} Generating content using ${requestBody.provider}...`);
-    const result = await llmProvider.generateContent(requestBody.prompt, generationOptions);
+    console.log(`${LOG_LLM_PREFIX} Generating content using ${requestedLlmProvider}...`);
+    const result = await llmProvider.generateContent(prompt, generationOptions);
     
-    console.log(`${LOG_LLM_PREFIX} Successfully generated content from ${requestBody.provider}.`);
+    console.log(`${LOG_LLM_PREFIX} Successfully generated content from ${requestedLlmProvider}.`);
     res.status(200).json({ response: result });
 
   } catch (error: any) {
-    console.error(`${LOG_LLM_PREFIX} Error during LLM generation for provider ${requestBody.provider}:`, error);
+    console.error(`${LOG_LLM_PREFIX} Error during LLM generation for provider ${requestedLlmProvider}:`, error);
     res.status(500).json({
-      message: `An error occurred with the ${requestBody.provider} LLM provider.`,
+      message: `An error occurred with the ${requestedLlmProvider} LLM provider.`,
       error: error.message || "Unknown error",
       // stack: process.env.NODE_ENV === 'development' ? error.stack : undefined, // Optional: for debugging
     });

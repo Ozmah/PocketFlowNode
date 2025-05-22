@@ -1,6 +1,6 @@
 import yaml from 'js-yaml';
-import { callLlm } from '../utils/llm';
 import { Abstraction, Relationship, ProjectAnalysis, OrderChaptersOptions } from '../types';
+import { LlmProvider, LlmGenerationOptions } from '../llm/types';
 
 /**
  * Helper function to parse abstraction references like "0 # AbstractionName" or just "0"
@@ -43,6 +43,7 @@ export async function orderChapters(
   abstractions: Abstraction[],
   projectAnalysis: ProjectAnalysis,
   projectName: string,
+  llmProvider: LlmProvider, // Nuevo parámetro
   options: OrderChaptersOptions = {}
 ): Promise<number[]> {
   if (!abstractions || abstractions.length === 0) {
@@ -59,6 +60,7 @@ export async function orderChapters(
   const {
     language = 'english', // Default to English
     useCache = true,
+    llmOptions // Nuevo
   } = options;
 
   // 1. Create LLM Context
@@ -133,8 +135,12 @@ Now, provide the YAML list representing the ordered abstraction indices.
 `;
 
   // 3. Call LLM
+  const finalLlmOptions: LlmGenerationOptions = {
+    ...(llmOptions || {}),
+    useCache: useCache,
+  };
   console.log(`Calling LLM to order chapters for project "${projectName}"...`);
-  const llmResponse = await callLlm(prompt, { useCache });
+  const llmResponse = await llmProvider.generateContent(prompt, finalLlmOptions);
 
   // 4. Parse and Validate Output
   let rawOrderedIndices: any;
