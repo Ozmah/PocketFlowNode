@@ -109,7 +109,7 @@ This endpoint processes the GitHub repository and generates the tutorial.
 	"maxFileSize": 150000,
 	"language": "spanish",
 	"useCache": true,
-	"maxAbstractions": 12
+	"maxAbstractions": 10
 }
 ```
 
