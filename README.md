@@ -27,18 +27,14 @@ This project is a Node.js/TypeScript conversion and enhancement of the original 
 1.  **Clone the repository**:
 
     ```bash
-    git clone <your_repository_url>
+    git clone git@github.com:Ozmah/PocketFlowNode.git
     ```
-
-    (Replace `<your_repository_url>` with the actual URL of this project's repository)
 
 2.  **Navigate to the directory**:
 
     ```bash
-    cd <repository_directory>
+    cd PocketFlowNode
     ```
-
-    (Replace `<repository_directory>` with the name of the cloned folder)
 
 3.  **Install dependencies**:
     ```bash
@@ -156,12 +152,12 @@ npm test
 
 This command uses Jest to execute all unit tests located in the `tests` directory. Tests cover utility functions, core logic helpers, and LLM interaction points (with mocks).
 
-## Project Structure (Brief)
+## Project Structure
 
 ```
 .
 ├── .cache/            # LLM response cache and interaction logs (gitignored)
-├── dist/              # Compiled JavaScript output (gitignored)
+├── jekyll/            # Jekyll configuration for documentation site
 ├── node_modules/      # Project dependencies (gitignored)
 ├── src/               # Source code
 │   ├── core/          # Core logic for abstraction, relationships, chapters generation
@@ -171,31 +167,73 @@ This command uses Jest to execute all unit tests located in the `tests` director
 ├── tests/             # Unit tests
 │   ├── core/          # Tests for core logic modules
 │   └── utils/         # Tests for utility modules
-├── .env               # Environment variables (gitignored by default, create this file)
+├── .env               # Environment variables (gitignored, create this file)
 ├── .gitignore         # Specifies intentionally untracked files
 ├── jest.config.js     # Jest test runner configuration
+├── LICENSE            # MIT License
 ├── package.json       # Project metadata and dependencies
 ├── package-lock.json  # Records exact versions of dependencies
 ├── README.md          # This file
 └── tsconfig.json      # TypeScript compiler configuration
 ```
 
-## Contributing
+Note: The `dist/` directory will be created when you build the project using `npm run build`. It contains the compiled JavaScript output and is gitignored.
 
-Contributions are welcome! If you'd like to contribute, please:
+## Tutorial File Format
 
-1.  Fork the repository.
-2.  Create a new branch for your feature or bug fix (`git checkout -b feature/your-feature-name`).
-3.  Make your changes.
-4.  Ensure your code adheres to the existing style and that all tests pass (`npm test`).
-5.  Commit your changes (`git commit -am 'Add some feature'`).
-6.  Push to the branch (`git push origin feature/your-feature-name`).
-7.  Submit a pull request with a clear description of your changes.
+Each tutorial chapter file must begin with YAML front matter (the content between the triple dashes). This front matter configures how Jekyll and the Just The Docs theme will process and display the page:
 
-## License
+Front matter for index.md:
 
-This project is licensed under the MIT License. (It is recommended to create a `LICENSE` file in the root of the project containing the full MIT License text.)
-
+```yaml
+---
+layout: default
+title: "IndexTitle"
+nav_order: 1
+has_children: true
+---
 ```
 
+```yaml
+---
+layout: default
+title: "Chapter Title"
+parent: "IndexTitle"
+nav_order: 1
+liquid: false
+---
 ```
+
+### Front Matter Fields Description
+
+-   `layout: default` - Uses the default page template from Just The Docs theme
+-   `title: "Chapter Title"` - The page title that appears in navigation and browser tab
+-   `parent: "Router"` - Groups this page under the main "Router" section in the sidebar navigation
+-   `nav_order: 1` - Controls the ordering of pages in the navigation menu (1, 2, 3, etc.)
+-   `liquid: false` - Disables Jekyll's Liquid template processing to prevent conflicts with code containing double braces `{{ }}`
+
+The front matter must be followed by your standard Markdown content starting with a heading.
+
+---
+
+## MIT License
+
+Copyright (c) 2024 PocketFlow Node Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

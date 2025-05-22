@@ -1,0 +1,22 @@
+# Gemfile
+source "https://rubygems.org"
+
+gem "jekyll", "~> 4.3"
+gem "just-the-docs", "~> 0.4"
+gem "webrick", "~> 1.7" # Necesario para Jekyll serve en Ruby 3+
+
+# Plugins Jekyll
+group :jekyll_plugins do
+  gem "jekyll-feed", "~> 0.12"
+  gem "jekyll-sitemap"
+end
+
+# Windows y JRuby no incluyen archivos zoneinfo, por lo que agrega la gem tzinfo-data
+# y las gemas asociadas en las plataformas de Windows y JRuby.
+platforms :mingw, :x64_mingw, :mswin, :jruby do
+  gem "tzinfo", "~> 1.2"
+  gem "tzinfo-data"
+end
+
+# Performance-booster para observar directorios en Windows
+gem "listen", "~> 3.8", :platforms => [:mingw, :x64_mingw, :mswin]
