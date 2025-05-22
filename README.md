@@ -116,7 +116,15 @@ This endpoint processes the GitHub repository and generates the tutorial.
 	"maxFileSize": 150000,
 	"language": "spanish",
 	"useCache": true,
-	"maxAbstractions": 10
+	"maxAbstractions": 10,
+	"llmProvider": "gemini", // O "claude", "openai"
+	"llmApiKey": "YOUR_PROVIDER_API_KEY_IF_OVERRIDING_ENV", // Opcional
+	"llmModel": "gemini-pro", // Opcional, ej: "claude-2.1", "gpt-4"
+	"llmOptions": { // Opcional
+	  "temperature": 0.6,
+	  "maxTokens": 1000 
+	  // "useCache" también puede ir aquí para Gemini, aunque el "useCache" global de arriba también se considera
+	}
 }
 ```
 
@@ -129,8 +137,18 @@ This endpoint processes the GitHub repository and generates the tutorial.
 -   `excludePatterns` (string[], optional): An array of glob patterns specifying which files to exclude from the analysis. Example: `["**/node_modules/**", "**/*.log"]`. Exclusions take precedence over inclusions. Uses `micromatch` with `dot:true` enabled.
 -   `maxFileSize` (number, optional): The maximum size (in bytes) for individual files to be included in the analysis. Default: `1024 * 1024` (1MB) as per `src/utils/crawl_github_files.ts`.
 -   `language` (string, optional): The target language for the generated tutorial content (e.g., "english", "spanish", "french"). Default: `"english"`.
--   `useCache` (boolean, optional): Whether to use the caching mechanism for LLM responses. Default: `true`.
--   `maxAbstractions` (number, optional): The maximum number of key abstractions the LLM should try to identify. Default: `15` (as per `src/index.ts`).
+-   `useCache` (boolean, optional): Whether to use the caching mechanism for LLM responses. Default: `true`. This applies to LLM calls made by core functions if not overridden by `llmOptions`.
+-   `maxAbstractions` (number, optional): The maximum number of key abstractions the LLM should try to identify. Default: `15`.
+-   `llmProvider` (string, optional): Specifies the LLM provider to use for tutorial generation. 
+    -   Enum: `"gemini"`, `"claude"`, `"openai"`.
+    -   If not provided, defaults to `"gemini"`.
+-   `llmApiKey` (string, optional): The API key for the selected LLM provider. If provided, this will override the corresponding environment variable (e.g., `GEMINI_API_KEY`, `CLAUDE_API_KEY`, `OPENAI_API_KEY`) for this specific tutorial generation.
+-   `llmModel` (string, optional): The specific model name to use for the selected LLM provider (e.g., `"gemini-pro"`, `"claude-2.1"`, `"gpt-4"`). If not provided, a default model for the chosen provider will be used.
+-   `llmOptions` (object, optional): Additional parameters for the LLM generation, passed to all LLM calls within the tutorial generation process. These can include:
+    -   `temperature` (number): Controls randomness.
+    -   `maxTokens` (number): Maximum number of tokens for LLM responses.
+    -   `useCache` (boolean, specific to Gemini): Overrides the global `useCache` setting for LLM calls if provided here.
+    -   Other provider-specific parameters.
 
 **Success Response**:
 
