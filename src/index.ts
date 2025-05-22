@@ -1,5 +1,7 @@
 import "dotenv/config";
 import express, { Request, Response } from "express";
+import { LlmProviderType, LlmGenerationOptions, LlmProviderConfig } from './llm/types';
+import { createLlmProvider } from './llm/factory';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -24,6 +26,15 @@ if (!process.env.GEMINI_API_KEY) {
 }
 
 app.use(express.json());
+
+// Interface for the /llm/generate endpoint request body
+interface LlmGenerateRequestBody {
+  provider: LlmProviderType;
+  prompt: string;
+  apiKey?: string; // Optional: API key can be passed in request
+  model?: string; // Optional: Model name
+  options?: LlmGenerationOptions; // Optional: Other generation options
+}
 
 app.get("/ping", (req: Request, res: Response) => {
 	res.send("pong");
@@ -250,6 +261,66 @@ app.post("/generate-tutorial", async (req: Request, res: Response) => {
 			// stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
 		});
 	}
+});
+
+app.post("/llm/generate", async (req: Request, res: Response) => {
+  const requestBody = req.body as LlmGenerateRequestBody;
+  const LOG_LLM_PREFIX = "[LLM Service]";
+
+  // --- Input validation ---
+  if (!requestBody.provider || typeof requestBody.provider !== "string") {
+    return res.status(400).send("provider is required and must be a string (e.g., 'gemini', 'claude', 'openai').");
+  }
+  if (!requestBody.prompt || typeof requestBody.prompt !== "string") {
+    return res.status(400).send("prompt is required and must be a string.");
+  }
+  if (requestBody.apiKey !== undefined && typeof requestBody.apiKey !== "string") {
+    return res.status(400).send("apiKey must be a string if provided.");
+  }
+  if (requestBody.model !== undefined && typeof requestBody.model !== "string") {
+    return res.status(400).send("model must be a string if provided.");
+  }
+  // Basic validation for options if provided
+  if (requestBody.options !== undefined && typeof requestBody.options !== 'object') {
+    return res.status(400).send("options must be an object if provided.");
+  }
+
+  console.log(`${LOG_LLM_PREFIX} Received request for provider: ${requestBody.provider}, model: ${requestBody.model || 'default'}`);
+
+  try {
+    // Prepare provider configuration
+    const providerConfig: LlmProviderConfig = {
+      apiKey: requestBody.apiKey, // Pass it to the factory; factory will check env if this is undefined
+      modelName: requestBody.model, // Pass model to factory for default, can be overridden in generateContent options
+    };
+
+    const llmProvider = createLlmProvider(requestBody.provider, providerConfig);
+
+    // Prepare generation options
+    const generationOptions: LlmGenerationOptions = {
+      ...requestBody.options, // User-provided options (temperature, maxTokens etc.)
+      model: requestBody.model || requestBody.options?.model, // Explicit model in request body takes precedence
+    };
+    
+    // Remove model from options if it's undefined to avoid sending `model: undefined` to providers
+    if (generationOptions.model === undefined) {
+        delete generationOptions.model;
+    }
+
+    console.log(`${LOG_LLM_PREFIX} Generating content using ${requestBody.provider}...`);
+    const result = await llmProvider.generateContent(requestBody.prompt, generationOptions);
+    
+    console.log(`${LOG_LLM_PREFIX} Successfully generated content from ${requestBody.provider}.`);
+    res.status(200).json({ response: result });
+
+  } catch (error: any) {
+    console.error(`${LOG_LLM_PREFIX} Error during LLM generation for provider ${requestBody.provider}:`, error);
+    res.status(500).json({
+      message: `An error occurred with the ${requestBody.provider} LLM provider.`,
+      error: error.message || "Unknown error",
+      // stack: process.env.NODE_ENV === 'development' ? error.stack : undefined, // Optional: for debugging
+    });
+  }
 });
 
 app.listen(port, () => {
