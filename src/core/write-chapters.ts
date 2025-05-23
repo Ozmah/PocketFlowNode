@@ -1,4 +1,4 @@
-import { callLlm } from '../utils/llm';
+import { callLlm, CallLlmArgs } from '../utils/llm';
 import {
   Abstraction,
   FetchedFile,
@@ -33,7 +33,7 @@ export async function writeChapters(
   abstractions: Abstraction[],
   filesData: FetchedFile[],
   projectName: string,
-  options: WriteChaptersOptions = {}
+  options: WriteChaptersOptions = {} // providerName and llmModelName are now part of WriteChaptersOptions
 ): Promise<ChapterOutput[]> {
   if (!chapterOrder || chapterOrder.length === 0) {
     console.warn('writeChapters called with no chapterOrder. Returning empty array.');
@@ -44,7 +44,12 @@ export async function writeChapters(
     return [];
   }
 
-  const { language = 'english', useCache = true } = options;
+  const { 
+    language = 'english', 
+    useCache = true, 
+    providerName, // Will be undefined if not provided
+    llmModelName  // Will be undefined if not provided
+  } = options;
 
   const chaptersWrittenSoFarSummary: string[] = []; // Stores summaries or full content for context
   const allChapterOutputs: ChapterOutput[] = [];
@@ -185,7 +190,15 @@ Start directly with the chapter heading.
 `;
 
     console.log(`Writing Chapter ${chapterNum}: "${abstractionName}" (Abstraction Index: ${abstractionIndex}) using LLM...`);
-    let chapterContent = await callLlm(prompt, { useCache });
+    
+    const llmArgs: CallLlmArgs = {
+      useCache,
+      providerName, // Pass through from options
+      modelName: llmModelName, // Pass through from options (mapped to modelName)
+      // Any other LlmOptions can be added here if exposed in WriteChaptersOptions
+    };
+    
+    let chapterContent = await callLlm(prompt, llmArgs);
 
     // Basic validation/cleanup: Ensure heading is present (as per Python version)
     if (!chapterContent.trim().startsWith('#')) {
