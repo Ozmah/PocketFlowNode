@@ -20,7 +20,9 @@ This project is a Node.js/TypeScript conversion and enhancement of the original 
 
 -   **Node.js**: v18.x or later recommended.
 -   **npm** (comes with Node.js) or **yarn**.
--   **Google Gemini API Key**: Essential for interacting with the LLM.
+-   **Node.js**: v18.x or later recommended.
+-   **npm** (comes with Node.js) or **yarn**.
+-   **LLM API Keys**: At least one API key for an LLM provider (Google Gemini, OpenAI, or Anthropic) is required. The application will not start if no keys are configured.
 
 ## Setup and Installation
 
@@ -49,19 +51,30 @@ Create a `.env` file in the root of the project. **This file should not be commi
 Contents of `.env`:
 
 ```env
-# Required
+# LLM API Keys - At least one is required
 GEMINI_API_KEY=your_google_gemini_api_key_here
+OPENAI_API_KEY=your_openai_api_key_here
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
 
-# Optional
+# Optional: Default model names if not specified in API requests
+# These are only examples; the application has internal defaults for each provider.
+# GEMINI_MODEL=gemini-pro 
+# OPENAI_MODEL=gpt-3.5-turbo
+# ANTHROPIC_MODEL=claude-instant-1.2
+
+# Other Optional Variables
 PORT=3000
-GEMINI_MODEL=gemini-pro
 NODE_ENV=development # 'production' for production builds
 # LOG_LEVEL=debug # Example if a more sophisticated logger is added in the future
 ```
 
--   **`GEMINI_API_KEY` (Required)**: Your API key for Google Gemini. The application will not start without this key.
--   **`PORT` (Optional)**: The port on which the server will run. Defaults to `3000` (as typically set in `src/index.ts` or `process.env.PORT`).
--   **`GEMINI_MODEL` (Optional)**: The specific Gemini model to use. Defaults to `gemini-pro` (as set in `src/utils/llm.ts`).
+-   **LLM API Keys (At least one is Required)**:
+    -   `GEMINI_API_KEY`: Your API key for Google Gemini models.
+    -   `OPENAI_API_KEY`: Your API key for OpenAI (ChatGPT) models.
+    -   `ANTHROPIC_API_KEY`: Your API key for Anthropic (Claude) models.
+    The application checks for these keys at startup. It will log warnings for any missing keys and will exit if **none** of these API keys are found. If multiple keys are provided, you can select the LLM provider via the API request.
+-   **`PORT` (Optional)**: The port on which the server will run. Defaults to `3000`.
+-   **`*_MODEL` (Optional)**: You can set default model names for each provider (e.g., `GEMINI_MODEL`, `OPENAI_MODEL`, `ANTHROPIC_MODEL`). These serve as fallback defaults if a model is not specified in an API request. The application has its own internal defaults if these are not set (e.g., "gemini-pro", "gpt-3.5-turbo", "claude-instant-1.2").
 -   **`NODE_ENV` (Optional)**: Set to `development` for development-specific features (like more detailed error stacks in API responses) or `production` for production.
 
 ## Running the Application
@@ -109,21 +122,32 @@ This endpoint processes the GitHub repository and generates the tutorial.
 	"maxFileSize": 150000,
 	"language": "spanish",
 	"useCache": true,
-	"maxAbstractions": 10
+	"maxAbstractions": 10,
+	"llmProvider": "openai",
+	"llmModelName": "gpt-4-turbo",
+	"llmOptions": { "temperature": 0.5 }
 }
 ```
 
 **Field Descriptions**:
 
 -   `repoUrl` (string, required): The URL of the public GitHub repository to analyze.
--   `projectName` (string, optional): A name for the project. This will be used in the tutorial title and as the base name for the downloaded ZIP file. If not provided, it's derived from the `repoUrl` (e.g., the repository name).
--   `githubToken` (string, optional): A GitHub Personal Access Token. Useful for accessing private repositories (though current implementation primarily targets public ones) or for higher API rate limits when fetching repository contents.
--   `includePatterns` (string[], optional): An array of glob patterns specifying which files to include in the analysis. Example: `["src/**/*.js", "*.md"]`. Uses `micromatch` with `dot:true` enabled (matches dotfiles).
--   `excludePatterns` (string[], optional): An array of glob patterns specifying which files to exclude from the analysis. Example: `["**/node_modules/**", "**/*.log"]`. Exclusions take precedence over inclusions. Uses `micromatch` with `dot:true` enabled.
--   `maxFileSize` (number, optional): The maximum size (in bytes) for individual files to be included in the analysis. Default: `1024 * 1024` (1MB) as per `src/utils/crawl_github_files.ts`.
--   `language` (string, optional): The target language for the generated tutorial content (e.g., "english", "spanish", "french"). Default: `"english"`.
--   `useCache` (boolean, optional): Whether to use the caching mechanism for LLM responses. Default: `true`.
--   `maxAbstractions` (number, optional): The maximum number of key abstractions the LLM should try to identify. Default: `15` (as per `src/index.ts`).
+-   `projectName` (string, optional): A name for the project. This will be used in the tutorial title and as the base name for the downloaded ZIP file. If not provided, it's derived from the `repoUrl`.
+-   `githubToken` (string, optional): A GitHub Personal Access Token. Useful for accessing private repositories or for higher API rate limits.
+-   `includePatterns` (string[], optional): Glob patterns for files to include. Uses `micromatch` with `dot:true`.
+-   `excludePatterns` (string[], optional): Glob patterns for files to exclude. Exclusions override inclusions. Uses `micromatch` with `dot:true`.
+-   `maxFileSize` (number, optional): Maximum individual file size in bytes. Default: `1024 * 1024` (1MB).
+-   `language` (string, optional): Target language for tutorial content (e.g., "english", "spanish"). Default: `"english"`.
+-   `useCache` (boolean, optional): Whether to use LLM response caching. Enabled by default (`true`). Caching stores LLM responses for identical prompts to speed up subsequent requests and reduce API costs. Cache files are stored in the `.cache` directory.
+-   `maxAbstractions` (number, optional): Maximum number of key abstractions to identify. Default: `15`.
+-   `llmProvider` (string, optional): Specifies the LLM provider to use.
+    -   Valid values: `"gemini"`, `"chatgpt"`, `"claude"`.
+    -   If not specified, defaults to `"gemini"`.
+    -   Ensure the corresponding API key for the selected provider is set in the `.env` file.
+-   `llmModelName` (string, optional): Specifies the particular model from the chosen provider.
+    -   Examples: `"gemini-pro"`, `"gemini-1.5-flash"`, `"gpt-4"`, `"gpt-3.5-turbo"`, `"claude-3-opus-20240229"`, `"claude-instant-1.2"`.
+    -   If not provided, a default model for the selected provider will be used (e.g., "gemini-pro" for Gemini, "gpt-3.5-turbo" for ChatGPT).
+-   `llmOptions` (object, optional): Allows passing additional, provider-specific options to the LLM. This is an advanced feature and is generally not needed for standard use. For example, `{"temperature": 0.7, "max_tokens": 1000}`. The exact options depend on the chosen LLM provider's API.
 
 **Success Response**:
 

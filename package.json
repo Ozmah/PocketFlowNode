@@ -34,6 +34,7 @@
 		"typescript": "^5.8.3"
 	},
 	"dependencies": {
+		"@anthropic-ai/sdk": "^0.52.0",
 		"@google/generative-ai": "^0.24.1",
 		"@types/js-yaml": "^4.0.9",
 		"@types/micromatch": "^4.0.9",
@@ -41,6 +42,7 @@
 		"dotenv": "^16.5.0",
 		"js-yaml": "^4.1.0",
 		"jszip": "^3.10.1",
-		"micromatch": "^4.0.8"
+		"micromatch": "^4.0.8",
+		"openai": "^4.103.0"
 	}
 }

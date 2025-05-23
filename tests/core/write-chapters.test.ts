@@ -1,4 +1,11 @@
-import { sanitizeFilename } from '../../src/core/write-chapters';
+import { sanitizeFilename, writeChapters } from '../../src/core/write-chapters';
+import { Abstraction, FetchedFile, WriteChaptersOptions, ChapterOutput } from '../../src/types';
+import { callLlm } from '../../src/utils/llm';
+
+// Mock callLlm
+jest.mock('../../src/utils/llm', () => ({
+  callLlm: jest.fn(),
+}));
 
 describe('sanitizeFilename', () => {
   it('should create basic filename with padded chapter number', () => {
@@ -44,5 +51,133 @@ describe('sanitizeFilename', () => {
     expect(sanitizeFilename('Single Digit', 1)).toMatch(/^01_/);
     expect(sanitizeFilename('Double Digit', 12)).toMatch(/^12_/);
     expect(sanitizeFilename('Triple Digit', 123)).toMatch(/^123_/); // padStart(2, '0') will still result in '123'
+  });
+});
+
+describe('writeChapters', () => {
+  const mockCallLlm = callLlm as jest.Mock;
+
+  const sampleAbstractions: Abstraction[] = [
+    { name: 'Abstraction 1', description: 'Desc 1', fileIndices: [0] },
+    { name: 'Abstraction 2', description: 'Desc 2', fileIndices: [1] },
+  ];
+  const sampleFilesData: FetchedFile[] = [
+    { path: 'file1.ts', content: 'content1' },
+    { path: 'file2.ts', content: 'content2' },
+  ];
+  const sampleProjectName = 'TestProject';
+  const sampleChapterOrder = [0, 1]; // Indices from sampleAbstractions
+
+  beforeEach(() => {
+    mockCallLlm.mockReset();
+    // Default mock implementation for callLlm for each chapter
+    mockCallLlm.mockImplementation(async (prompt: string, options: any) => {
+      if (prompt.includes(sampleAbstractions[0].name)) return `# Chapter 1: ${sampleAbstractions[0].name}\nContent for Abstraction 1.`;
+      if (prompt.includes(sampleAbstractions[1].name)) return `# Chapter 2: ${sampleAbstractions[1].name}\nContent for Abstraction 2.`;
+      return 'Default mock LLM response';
+    });
+  });
+
+  test('should call callLlm for each chapter in order', async () => {
+    await writeChapters(sampleChapterOrder, sampleAbstractions, sampleFilesData, sampleProjectName);
+    expect(mockCallLlm).toHaveBeenCalledTimes(sampleChapterOrder.length);
+    // Check that it was called with prompts containing the abstraction names
+    expect(mockCallLlm.mock.calls[0][0]).toContain(sampleAbstractions[0].name);
+    expect(mockCallLlm.mock.calls[1][0]).toContain(sampleAbstractions[1].name);
+  });
+
+  test('should pass default useCache=true to callLlm if not specified in options', async () => {
+    await writeChapters(sampleChapterOrder, sampleAbstractions, sampleFilesData, sampleProjectName, {});
+    expect(mockCallLlm).toHaveBeenCalledTimes(sampleChapterOrder.length);
+    sampleChapterOrder.forEach((_, index) => {
+      expect(mockCallLlm.mock.calls[index][1]).toEqual(expect.objectContaining({
+        useCache: true,
+        providerName: undefined, // Default if not specified
+        modelName: undefined,    // Default if not specified
+      }));
+    });
+  });
+
+  test('should pass specified useCache, providerName, and llmModelName to callLlm', async () => {
+    const options: WriteChaptersOptions = {
+      useCache: false,
+      providerName: 'test-provider',
+      llmModelName: 'test-model-123',
+      language: 'english', // language is used in prompt, not directly in callLlm options object
+    };
+    await writeChapters(sampleChapterOrder, sampleAbstractions, sampleFilesData, sampleProjectName, options);
+    
+    expect(mockCallLlm).toHaveBeenCalledTimes(sampleChapterOrder.length);
+    sampleChapterOrder.forEach((_, index) => {
+      expect(mockCallLlm.mock.calls[index][1]).toEqual(expect.objectContaining({
+        useCache: false,
+        providerName: 'test-provider',
+        modelName: 'test-model-123', // Note: llmModelName from WriteChaptersOptions becomes modelName for CallLlmArgs
+      }));
+    });
+  });
+
+  test('should pass undefined for providerName and llmModelName if not in options', async () => {
+    const options: WriteChaptersOptions = {
+      useCache: true,
+      language: 'french',
+    };
+    await writeChapters(sampleChapterOrder, sampleAbstractions, sampleFilesData, sampleProjectName, options);
+    
+    expect(mockCallLlm).toHaveBeenCalledTimes(sampleChapterOrder.length);
+    sampleChapterOrder.forEach((_, index) => {
+      expect(mockCallLlm.mock.calls[index][1]).toEqual(expect.objectContaining({
+        useCache: true,
+        providerName: undefined,
+        modelName: undefined,
+      }));
+    });
+  });
+
+  test('should return chapter outputs with correct structure', async () => {
+    const results = await writeChapters(sampleChapterOrder, sampleAbstractions, sampleFilesData, sampleProjectName);
+    expect(results).toHaveLength(sampleChapterOrder.length);
+    expect(results[0]).toEqual(expect.objectContaining({
+      chapterNumber: 1,
+      abstractionIndex: sampleChapterOrder[0],
+      title: sampleAbstractions[0].name,
+      content: expect.stringContaining(sampleAbstractions[0].name),
+      filename: expect.stringMatching(/^01_/),
+    }));
+    expect(results[1]).toEqual(expect.objectContaining({
+      chapterNumber: 2,
+      abstractionIndex: sampleChapterOrder[1],
+      title: sampleAbstractions[1].name,
+      content: expect.stringContaining(sampleAbstractions[1].name),
+      filename: expect.stringMatching(/^02_/),
+    }));
+  });
+  
+  test('should handle empty chapterOrder gracefully', async () => {
+    const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const results = await writeChapters([], sampleAbstractions, sampleFilesData, sampleProjectName);
+    expect(results).toEqual([]);
+    expect(mockCallLlm).not.toHaveBeenCalled();
+    expect(consoleWarnSpy).toHaveBeenCalledWith('writeChapters called with no chapterOrder. Returning empty array.');
+    consoleWarnSpy.mockRestore();
+  });
+
+  test('should handle missing abstraction for an index gracefully', async () => {
+    const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    // Order references an index not in abstractions array
+    const faultyChapterOrder = [0, 2]; // Abstraction at index 2 does not exist
+    
+    mockCallLlm.mockImplementation(async (prompt: string, options: any) => {
+        if (prompt.includes(sampleAbstractions[0].name)) return `# Chapter 1: ${sampleAbstractions[0].name}\nContent for Abstraction 1.`;
+        return 'Default mock LLM response';
+      });
+
+    const results = await writeChapters(faultyChapterOrder, sampleAbstractions, sampleFilesData, sampleProjectName);
+    
+    expect(mockCallLlm).toHaveBeenCalledTimes(1); // Only called for abstraction 0
+    expect(results).toHaveLength(1); // Only one chapter generated
+    expect(results[0].title).toBe(sampleAbstractions[0].name);
+    expect(consoleWarnSpy).toHaveBeenCalledWith('Skipping chapter 2: Abstraction with index 2 not found.');
+    consoleWarnSpy.mockRestore();
   });
 });

@@ -68,6 +68,16 @@ export interface IdentifyAbstractionsOptions {
   language?: string; // For prompt instructions
   useCache?: boolean; // For LLM calls
   maxAbstractions?: number; // To limit the number of abstractions identified
+  /**
+   * @property {string} [providerName] - The name of the LLM provider to use.
+   * Defaults to 'gemini' if not specified (this default is handled by `callLlm`).
+   */
+  providerName?: string;
+  /**
+   * @property {string} [llmModelName] - The specific model name for the selected LLM provider.
+   * If not provided, the default model for the provider will be used.
+   */
+  llmModelName?: string;
 }
 
 // --- Interfaces for analyzeRelationships ---
@@ -89,6 +99,16 @@ export interface ProjectAnalysis {
 export interface AnalyzeRelationshipsOptions {
   language?: string; // For prompt instructions (summary, labels)
   useCache?: boolean; // For LLM calls
+  /**
+   * @property {string} [providerName] - The name of the LLM provider to use.
+   * Defaults to 'gemini' if not specified (this default is handled by `callLlm`).
+   */
+  providerName?: string;
+  /**
+   * @property {string} [llmModelName] - The specific model name for the selected LLM provider.
+   * If not provided, the default model for the provider will be used.
+   */
+  llmModelName?: string;
 }
 
 // --- Interfaces for orderChapters ---
@@ -97,6 +117,16 @@ export interface AnalyzeRelationshipsOptions {
 export interface OrderChaptersOptions {
   language?: string; // For prompt context notes, as LLM deals with potentially translated names/summaries
   useCache?: boolean; // For LLM calls
+  /**
+   * @property {string} [providerName] - The name of the LLM provider to use.
+   * Defaults to 'gemini' if not specified (this default is handled by `callLlm`).
+   */
+  providerName?: string;
+  /**
+   * @property {string} [llmModelName] - The specific model name for the selected LLM provider.
+   * If not provided, the default model for the provider will be used.
+   */
+  llmModelName?: string;
 }
 
 // --- Interfaces for writeChapters ---
@@ -113,6 +143,16 @@ export interface ChapterOutput {
 export interface WriteChaptersOptions {
   language?: string;
   useCache?: boolean;
+  /**
+   * @property {string} [providerName] - The name of the LLM provider to use (e.g., 'gemini', 'chatgpt', 'claude').
+   * Defaults to 'gemini' if not specified (this default is handled by `callLlm`).
+   */
+  providerName?: string;
+  /**
+   * @property {string} [llmModelName] - The specific model name for the selected LLM provider.
+   * If not provided, the default model for the provider will be used.
+   */
+  llmModelName?: string;
 }
 
 // Helper for chapter linking information

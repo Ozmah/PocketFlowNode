@@ -1,166 +1,236 @@
-import { callLlm } from '../../src/utils/llm'; // Adjust path as necessary
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { callLlm, CallLlmArgs, hashPrompt, loadCache, saveCache, logInteraction, ensureCacheDirExists } from '../../src/utils/llm';
+import { getLlmProvider } from '../../src/llm/llm-factory'; // Actual path to the factory
+import { LlmProvider } from '../../src/llm/llm-provider'; // For typing the mock
 import fs from 'fs/promises';
-import crypto from 'crypto';
 import path from 'path';
+import crypto from 'crypto'; // Keep for hashPrompt tests if any, or remove if no other tests use it.
 
-// Mock @google/generative-ai
-jest.mock('@google/generative-ai');
+// Mock the LLM factory
+jest.mock('../../src/llm/llm-factory', () => ({
+  getLlmProvider: jest.fn(),
+}));
 
-// Mock fs/promises
+// Mock fs/promises for other utility functions if they are tested here
 jest.mock('fs/promises');
 
-const mockGenerateContent = jest.fn();
-const mockGetGenerativeModel = jest.fn(() => ({
-  generateContent: mockGenerateContent,
-}));
 
 const CACHE_DIR = path.join(process.cwd(), '.cache');
 const LLM_CACHE_FILE = path.join(CACHE_DIR, 'llm_cache.json');
-const LLM_LOG_FILE = path.join(CACHE_DIR, 'llm_interactions.log'); // Assuming this is the log file path
+const LLM_LOG_FILE = path.join(CACHE_DIR, 'llm_interactions.log');
 
-describe('callLlm', () => {
-  let originalApiKey: string | undefined;
-  const testPrompt = "Test prompt";
-  const testResponse = "Test LLM response";
-  const promptHash = crypto.createHash('sha256').update(testPrompt).digest('hex');
+
+describe('callLlm refactored', () => {
+  const mockGenerate = jest.fn();
+  const mockProvider: LlmProvider = {
+    generate: mockGenerate,
+  };
+  const testPrompt = 'Test prompt';
+  const testResponse = 'Test LLM response from provider';
 
   beforeEach(() => {
-    // Reset mocks for each test
     jest.clearAllMocks();
+    (getLlmProvider as jest.Mock).mockReturnValue(mockProvider); // Default mock for getLlmProvider
+    mockGenerate.mockResolvedValue(testResponse); // Default mock for provider.generate
+  });
 
-    // Backup original API key and set a test one
-    originalApiKey = process.env.GEMINI_API_KEY;
-    process.env.GEMINI_API_KEY = "test-api-key";
+  test('should call getLlmProvider with default provider "gemini" if none is specified', async () => {
+    const options: CallLlmArgs = { useCache: true };
+    await callLlm(testPrompt, options);
+    expect(getLlmProvider).toHaveBeenCalledWith(undefined); // Factory handles default to 'gemini'
+  });
 
-    // Setup default mock implementations
-    (GoogleGenerativeAI as jest.Mock).mockImplementation(() => ({
-      getGenerativeModel: mockGetGenerativeModel,
-    }));
-    mockGenerateContent.mockResolvedValue({
-      response: {
-        text: () => testResponse,
-      },
+  test('should call getLlmProvider with the specified providerName', async () => {
+    const providerName = 'chatgpt';
+    const options: CallLlmArgs = { providerName, useCache: true };
+    await callLlm(testPrompt, options);
+    expect(getLlmProvider).toHaveBeenCalledWith(providerName);
+  });
+
+  test('should call provider.generate with the prompt and options', async () => {
+    const options: CallLlmArgs = { useCache: true, modelName: 'test-model' };
+    await callLlm(testPrompt, options);
+    expect(mockGenerate).toHaveBeenCalledWith(testPrompt, options);
+  });
+
+  test('should return the result from provider.generate', async () => {
+    const result = await callLlm(testPrompt, {});
+    expect(result).toBe(testResponse);
+  });
+
+  test('should re-throw error if getLlmProvider throws an error', async () => {
+    const factoryError = new Error('Unknown provider');
+    (getLlmProvider as jest.Mock).mockImplementation(() => {
+      throw factoryError;
     });
-
-    // Default fs mocks
-    (fs.readFile as jest.Mock).mockResolvedValue(JSON.stringify({})); // Empty cache
-    (fs.writeFile as jest.Mock).mockResolvedValue(undefined);
-    (fs.appendFile as jest.Mock).mockResolvedValue(undefined); // For logging
-    (fs.mkdir as jest.Mock).mockResolvedValue(undefined); // For ensureCacheDirExists
+    await expect(callLlm(testPrompt, {})).rejects.toThrow(factoryError);
+    // Check console.error for the additional logging in callLlm's catch block
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining(factoryError.message), expect.any(String));
   });
 
-  afterEach(() => {
-    // Restore original API key
-    process.env.GEMINI_API_KEY = originalApiKey;
-  });
-
-  test('should throw error if GEMINI_API_KEY is not set', async () => {
-    delete process.env.GEMINI_API_KEY; // Remove API key for this test
-    await expect(callLlm(testPrompt)).rejects.toThrow("GEMINI_API_KEY environment variable is not set.");
-    expect(fs.appendFile).toHaveBeenCalledWith(LLM_LOG_FILE, expect.stringContaining("GEMINI_API_KEY environment variable is not set."));
-  });
-
-  test('cache miss: should call LLM, return response, and write to cache', async () => {
-    (fs.readFile as jest.Mock).mockResolvedValueOnce(JSON.stringify({})); // Empty cache
-
-    const response = await callLlm(testPrompt, { useCache: true });
-
-    expect(response).toBe(testResponse);
-    expect(GoogleGenerativeAI).toHaveBeenCalledWith("test-api-key");
-    expect(mockGetGenerativeModel).toHaveBeenCalled();
-    expect(mockGenerateContent).toHaveBeenCalledWith(testPrompt);
-    expect(fs.writeFile).toHaveBeenCalledWith(
-      LLM_CACHE_FILE,
-      JSON.stringify({ [promptHash]: testResponse }, null, 2),
-      'utf-8'
-    );
-    expect(fs.appendFile).toHaveBeenCalledWith(LLM_LOG_FILE, expect.stringContaining(testResponse));
-  });
-
-  test('cache hit: should return cached response and not call LLM', async () => {
-    const cachedData = { [promptHash]: "Cached test response" };
-    (fs.readFile as jest.Mock).mockResolvedValueOnce(JSON.stringify(cachedData));
-
-    const response = await callLlm(testPrompt, { useCache: true });
-
-    expect(response).toBe("Cached test response");
-    expect(mockGetGenerativeModel).not.toHaveBeenCalled();
-    expect(mockGenerateContent).not.toHaveBeenCalled();
-    expect(fs.writeFile).not.toHaveBeenCalled(); // Should not write if cache hit
-    expect(fs.appendFile).toHaveBeenCalledWith(LLM_LOG_FILE, expect.stringContaining("[CACHE HIT] Cached test response"));
+  test('should re-throw error if provider.generate throws an error', async () => {
+    const providerError = new Error('Provider generation failed');
+    mockGenerate.mockRejectedValue(providerError);
+    await expect(callLlm(testPrompt, {})).rejects.toThrow(providerError);
+    // Check console.error for the additional logging in callLlm's catch block
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining(providerError.message), expect.any(String));
   });
   
-  test('no cache: should call LLM and not read from or write to cache file (but still log)', async () => {
-    const response = await callLlm(testPrompt, { useCache: false });
+  // Test for the console.error logging within callLlm's catch block
+  let consoleErrorSpy: jest.SpyInstance;
 
-    expect(response).toBe(testResponse);
-    expect(GoogleGenerativeAI).toHaveBeenCalledWith("test-api-key");
-    expect(mockGetGenerativeModel).toHaveBeenCalled();
-    expect(mockGenerateContent).toHaveBeenCalledWith(testPrompt);
-    
-    expect(fs.readFile).not.toHaveBeenCalledWith(LLM_CACHE_FILE, 'utf-8'); // Should not read cache file
-    expect(fs.writeFile).not.toHaveBeenCalled(); // Should not write to cache file
-    
-    // Should still log the interaction
-    expect(fs.appendFile).toHaveBeenCalledWith(LLM_LOG_FILE, expect.stringContaining(testResponse));
-    expect(fs.appendFile).not.toHaveBeenCalledWith(LLM_LOG_FILE, expect.stringContaining("[CACHE HIT]"));
+  beforeAll(() => {
+    // Spy on console.error before all tests in this suite
+    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
   });
 
-  test('should handle LLM API call failure gracefully', async () => {
-    const apiError = new Error("LLM API Error");
-    mockGenerateContent.mockRejectedValueOnce(apiError);
+  afterAll(() => {
+    // Restore console.error after all tests in this suite
+    consoleErrorSpy.mockRestore();
+  });
+});
 
-    try {
-      await callLlm(testPrompt);
-      // If callLlm doesn't throw, the test should fail
-      throw new Error("callLlm did not throw an error when expected"); 
-    } catch (error: any) {
-      expect(error.message).toContain("LLM API call failed");
-      expect(error.message).toContain("LLM API Error"); // Check for original error message part
-    }
-    
-    // Ensure error is logged
-    expect(fs.appendFile).toHaveBeenCalledWith(LLM_LOG_FILE, expect.stringContaining("LLM API call failed"));
-    expect(fs.appendFile).toHaveBeenCalledWith(LLM_LOG_FILE, expect.stringContaining(apiError.stack || apiError.message));
+// --- Tests for other utility functions from llm.ts can remain below if they exist ---
+// For example, if hashPrompt, loadCache, saveCache were tested directly.
+// The provided initial file only had tests for the old callLlm.
+// Adding example tests for other utils for completeness based on their exports.
+
+describe('Utility Functions from llm.ts', () => {
+  describe('hashPrompt', () => {
+    test('should return a consistent SHA256 hash', () => {
+      const prompt1 = "Hello World";
+      const prompt2 = "Hello World";
+      const prompt3 = "Hello World!";
+      
+      expect(hashPrompt(prompt1)).toBe(crypto.createHash('sha256').update(prompt1).digest('hex'));
+      expect(hashPrompt(prompt1)).toEqual(hashPrompt(prompt2));
+      expect(hashPrompt(prompt1)).not.toEqual(hashPrompt(prompt3));
+    });
   });
 
-  test('should handle cache read error: call LLM and attempt to write to cache', async () => {
-    (fs.readFile as jest.Mock).mockRejectedValueOnce(new Error("Cache read error"));
+  describe('ensureCacheDirExists', () => {
+    beforeEach(() => {
+      (fs.mkdir as jest.Mock).mockClear();
+    });
 
-    const response = await callLlm(testPrompt, { useCache: true });
+    test('should call fs.mkdir with recursive true', async () => {
+      await ensureCacheDirExists();
+      expect(fs.mkdir).toHaveBeenCalledWith(CACHE_DIR, { recursive: true });
+    });
 
-    expect(response).toBe(testResponse); // Should still get response from LLM
-    expect(mockGenerateContent).toHaveBeenCalledWith(testPrompt); // LLM was called
-    expect(fs.writeFile).toHaveBeenCalledWith( // Should attempt to write to cache
-      LLM_CACHE_FILE,
-      JSON.stringify({ [promptHash]: testResponse }, null, 2),
-      'utf-8'
-    );
+    test('should not warn if fs.mkdir throws EEXIST error', async () => {
+      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const eexistError = new Error("EEXIST: file already exists, mkdir '/app/.cache'");
+      // @ts-ignore
+      eexistError.code = 'EEXIST';
+      (fs.mkdir as jest.Mock).mockRejectedValueOnce(eexistError);
+      
+      await ensureCacheDirExists();
+      expect(fs.mkdir).toHaveBeenCalledTimes(1);
+      expect(consoleWarnSpy).not.toHaveBeenCalled();
+      consoleWarnSpy.mockRestore();
+    });
+
+    test('should warn if fs.mkdir throws other error', async () => {
+      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const otherError = new Error("Some other error");
+      (fs.mkdir as jest.Mock).mockRejectedValueOnce(otherError);
+      
+      await ensureCacheDirExists();
+      expect(fs.mkdir).toHaveBeenCalledTimes(1);
+      expect(consoleWarnSpy).toHaveBeenCalledWith(`Could not create cache directory ${CACHE_DIR}:`, otherError);
+      consoleWarnSpy.mockRestore();
+    });
   });
 
-  test('should handle cache write error: return LLM response but log warning', async () => {
-    (fs.writeFile as jest.Mock).mockRejectedValueOnce(new Error("Cache write error"));
-    // Mock console.warn to check if it's called
-    const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+  describe('loadCache', () => {
+    beforeEach(() => {
+      (fs.readFile as jest.Mock).mockClear();
+      (fs.mkdir as jest.Mock).mockClear(); // ensureCacheDirExists calls mkdir
+    });
 
-    const response = await callLlm(testPrompt, { useCache: true });
+    test('should call ensureCacheDirExists then try to read cache file', async () => {
+      (fs.readFile as jest.Mock).mockResolvedValueOnce(JSON.stringify({ test: "data" }));
+      const cache = await loadCache();
+      expect(fs.mkdir).toHaveBeenCalledWith(CACHE_DIR, { recursive: true }); // From ensureCacheDirExists
+      expect(fs.readFile).toHaveBeenCalledWith(LLM_CACHE_FILE, 'utf-8');
+      expect(cache).toEqual({ test: "data" });
+    });
 
-    expect(response).toBe(testResponse); // Should still get response from LLM
-    expect(mockGenerateContent).toHaveBeenCalledWith(testPrompt);
-    expect(consoleWarnSpy).toHaveBeenCalledWith('Error saving LLM cache:', expect.any(Error));
-    
-    consoleWarnSpy.mockRestore();
+    test('should return empty object if cache file does not exist (ENOENT)', async () => {
+      const enoentError = new Error("ENOENT: no such file or directory");
+      // @ts-ignore
+      enoentError.code = 'ENOENT';
+      (fs.readFile as jest.Mock).mockRejectedValueOnce(enoentError);
+      const cache = await loadCache();
+      expect(cache).toEqual({});
+    });
+
+    test('should return empty object and warn on other read errors', async () => {
+      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const otherError = new Error("Cache read permission denied");
+      (fs.readFile as jest.Mock).mockRejectedValueOnce(otherError);
+      
+      const cache = await loadCache();
+      expect(cache).toEqual({});
+      expect(consoleWarnSpy).toHaveBeenCalledWith('Error loading LLM cache:', otherError);
+      consoleWarnSpy.mockRestore();
+    });
   });
 
-  test('should create cache directory if it does not exist', async () => {
-    // Simulate cache directory not existing, then fs.mkdir succeeding.
-    // For this test, we are interested in the ensureCacheDirExists logic which is called by loadCache/saveCache.
-    // fs.mkdir is already mocked to resolve. We need to ensure it's called if appropriate.
-    // The actual check for EEXIST is inside ensureCacheDirExists, which is not directly tested here,
-    // but its effect (calling mkdir) is.
+  describe('saveCache', () => {
+     beforeEach(() => {
+      (fs.writeFile as jest.Mock).mockClear();
+      (fs.mkdir as jest.Mock).mockClear(); // ensureCacheDirExists calls mkdir
+    });
+    const testCacheData = { prompt123: "response123" };
+
+    test('should call ensureCacheDirExists then try to write cache file', async () => {
+      await saveCache(testCacheData);
+      expect(fs.mkdir).toHaveBeenCalledWith(CACHE_DIR, { recursive: true }); // From ensureCacheDirExists
+      expect(fs.writeFile).toHaveBeenCalledWith(LLM_CACHE_FILE, JSON.stringify(testCacheData, null, 2), 'utf-8');
+    });
+
+    test('should warn on cache write error', async () => {
+      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const writeError = new Error("Cache write permission denied");
+      (fs.writeFile as jest.Mock).mockRejectedValueOnce(writeError);
+      
+      await saveCache(testCacheData);
+      expect(consoleWarnSpy).toHaveBeenCalledWith('Error saving LLM cache:', writeError);
+      consoleWarnSpy.mockRestore();
+    });
+  });
+
+  describe('logInteraction', () => {
+    beforeEach(() => {
+      (fs.appendFile as jest.Mock).mockClear();
+      (fs.mkdir as jest.Mock).mockClear(); // ensureCacheDirExists calls mkdir
+    });
+    const testPrompt = "Log prompt";
+    const testResponse = "Log response";
+
+    test('should call ensureCacheDirExists then try to append to log file', async () => {
+      await logInteraction(testPrompt, testResponse);
+      expect(fs.mkdir).toHaveBeenCalledWith(CACHE_DIR, { recursive: true }); // From ensureCacheDirExists
+      expect(fs.appendFile).toHaveBeenCalledWith(LLM_LOG_FILE, expect.stringContaining(testPrompt));
+      expect(fs.appendFile).toHaveBeenCalledWith(LLM_LOG_FILE, expect.stringContaining(testResponse));
+    });
     
-    await callLlm(testPrompt, { useCache: true });
-    expect(fs.mkdir).toHaveBeenCalledWith(CACHE_DIR, { recursive: true });
+    test('should format Error object response correctly', async () => {
+        const errorResponse = new Error("Logged error response");
+        errorResponse.stack = "Error: Logged error response\n    at Test (test.js:1:1)";
+        await logInteraction(testPrompt, errorResponse);
+        expect(fs.appendFile).toHaveBeenCalledWith(LLM_LOG_FILE, expect.stringContaining(errorResponse.stack!));
+    });
+
+    test('should warn on log append error', async () => {
+      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const appendError = new Error("Log append permission denied");
+      (fs.appendFile as jest.Mock).mockRejectedValueOnce(appendError);
+      
+      await logInteraction(testPrompt, testResponse);
+      expect(consoleWarnSpy).toHaveBeenCalledWith('Error writing to LLM log file:', appendError);
+      consoleWarnSpy.mockRestore();
+    });
   });
 });
