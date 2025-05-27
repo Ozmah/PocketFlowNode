@@ -1,212 +1,235 @@
-import { ChatGptProvider } from '../../src/llm/chatgpt-provider';
-import { LlmOptions } from '../../src/llm/llm-provider';
-import * as llmUtils from '../../src/utils/llm'; // To mock its functions
-import OpenAI from 'openai'; // Import to type mock
+import { ChatGptProvider } from "../../src/llm/chatgpt-provider";
+import { LlmOptions } from "../../src/llm/llm-provider";
+import * as llmUtils from "../../src/utils/llm";
+import OpenAI from "openai";
 
-// Mock 'openai' module
+// Mock 'openai' module completely
 const mockCreateChatCompletion = jest.fn();
 const mockOpenAIInstance = {
-  chat: {
-    completions: {
-      create: mockCreateChatCompletion,
-    },
-  },
+	chat: {
+		completions: {
+			create: mockCreateChatCompletion,
+		},
+	},
 };
 
-jest.mock('openai', () => {
-  // This is the constructor mock
-  return jest.fn().mockImplementation(() => mockOpenAIInstance);
+jest.mock("openai", () => {
+	return jest.fn().mockImplementation(() => mockOpenAIInstance);
 });
 
-// Mock utility functions from src/utils/llm
-jest.mock('../../src/utils/llm', () => ({
-  loadCache: jest.fn(),
-  saveCache: jest.fn(),
-  logInteraction: jest.fn(),
-  hashPrompt: jest.fn(),
+// Mock utility functions completely
+jest.mock("../../src/utils/llm", () => ({
+	loadCache: jest.fn(),
+	saveCache: jest.fn(),
+	logInteraction: jest.fn(),
+	hashPrompt: jest.fn(),
+	__esModule: true,
 }));
 
-describe('ChatGptProvider', () => {
-  const OLD_ENV = process.env;
-  const MOCK_API_KEY = 'test-openai-api-key';
-  const MOCK_PROMPT = 'Test prompt for ChatGPT';
-  const MOCK_RESPONSE_TEXT = 'Test response from ChatGPT';
-  const MOCK_PROMPT_HASH = 'chatgpthash456';
+describe("ChatGptProvider", () => {
+	const OLD_ENV = process.env;
+	const MOCK_API_KEY = "test-openai-api-key";
+	const MOCK_PROMPT = "Test prompt for ChatGPT";
+	const MOCK_RESPONSE_TEXT = "Test response from ChatGPT";
+	const MOCK_PROMPT_HASH = "chatgpthash456";
 
-  beforeEach(() => {
-    jest.resetModules(); // Reset modules to clear cache between tests
-    process.env = { ...OLD_ENV }; // Make a copy
-    
-    // Clear all mock implementations and calls
-    mockCreateChatCompletion.mockReset();
-    (OpenAI as jest.Mock).mockClear(); // Clear the constructor mock
-    
-    (llmUtils.loadCache as jest.Mock).mockReset();
-    (llmUtils.saveCache as jest.Mock).mockReset();
-    (llmUtils.logInteraction as jest.Mock).mockReset();
-    (llmUtils.hashPrompt as jest.Mock).mockReset();
+	// Get reference to the mocked OpenAI constructor
+	const MockedOpenAIConstructor = OpenAI as jest.MockedClass<typeof OpenAI>;
 
-    // Default mock implementations
-    (llmUtils.hashPrompt as jest.Mock).mockReturnValue(MOCK_PROMPT_HASH);
-    mockCreateChatCompletion.mockResolvedValue({
-      choices: [{ message: { content: MOCK_RESPONSE_TEXT } }],
-    });
-  });
+	// Spy on console methods to suppress noise during tests
+	let consoleWarnSpy: jest.SpyInstance;
+	let consoleLogSpy: jest.SpyInstance;
+	let consoleErrorSpy: jest.SpyInstance;
 
-  afterAll(() => {
-    process.env = OLD_ENV; // Restore old environment
-  });
+	beforeAll(() => {
+		// Suppress console output during tests for cleaner test output
+		consoleWarnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+		consoleLogSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+		consoleErrorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+	});
 
-  describe('Constructor', () => {
-    test('should throw an error if OPENAI_API_KEY is not set', () => {
-      delete process.env.OPENAI_API_KEY;
-      expect(() => new ChatGptProvider()).toThrow('OPENAI_API_KEY environment variable is not set.');
-    });
+	afterAll(() => {
+		// Restore console methods
+		consoleWarnSpy.mockRestore();
+		consoleLogSpy.mockRestore();
+		consoleErrorSpy.mockRestore();
+		process.env = OLD_ENV;
+	});
 
-    test('should not throw an error if OPENAI_API_KEY is set', () => {
-      process.env.OPENAI_API_KEY = MOCK_API_KEY;
-      expect(() => new ChatGptProvider()).not.toThrow();
-      expect(OpenAI).toHaveBeenCalledWith({ apiKey: MOCK_API_KEY });
-    });
-  });
+	beforeEach(() => {
+		// Reset environment cleanly
+		process.env = { ...OLD_ENV };
 
-  describe('generate method', () => {
-    beforeEach(() => {
-      // Ensure API key is set for most generate tests
-      process.env.OPENAI_API_KEY = MOCK_API_KEY;
-    });
+		// Clear all mocks for consistent state
+		jest.clearAllMocks();
 
-    test('successful API call with no cache hit (useCache=true, cache empty)', async () => {
-      (llmUtils.loadCache as jest.Mock).mockResolvedValue({}); // Cache miss
+		// Set up default mock implementations
+		(llmUtils.hashPrompt as jest.Mock).mockReturnValue(MOCK_PROMPT_HASH);
+		(llmUtils.loadCache as jest.Mock).mockResolvedValue({});
+		(llmUtils.saveCache as jest.Mock).mockResolvedValue(undefined);
+		(llmUtils.logInteraction as jest.Mock).mockResolvedValue(undefined);
 
-      const provider = new ChatGptProvider();
-      const options: LlmOptions = { useCache: true };
-      const response = await provider.generate(MOCK_PROMPT, options);
+		mockCreateChatCompletion.mockResolvedValue({
+			choices: [{ message: { content: MOCK_RESPONSE_TEXT } }],
+		});
+	});
 
-      expect(llmUtils.hashPrompt).toHaveBeenCalledWith(MOCK_PROMPT);
-      expect(llmUtils.loadCache).toHaveBeenCalledTimes(2); // Called once for check, once before save
-      expect(OpenAI).toHaveBeenCalledTimes(1); // Constructor called once
-      expect(mockCreateChatCompletion).toHaveBeenCalledWith({
-        messages: [{ role: "user", content: MOCK_PROMPT }],
-        model: 'gpt-3.5-turbo', // Default model
-      });
-      expect(llmUtils.saveCache).toHaveBeenCalledWith({ [MOCK_PROMPT_HASH]: MOCK_RESPONSE_TEXT });
-      expect(llmUtils.logInteraction).toHaveBeenCalledWith(MOCK_PROMPT, MOCK_RESPONSE_TEXT);
-      expect(response).toBe(MOCK_RESPONSE_TEXT);
-    });
-    
-    test('successful API call when useCache is false', async () => {
-      const provider = new ChatGptProvider();
-      const options: LlmOptions = { useCache: false };
-      await provider.generate(MOCK_PROMPT, options);
+	describe("Constructor", () => {
+		test("should throw an error if OPENAI_API_KEY is not set", () => {
+			delete process.env.OPENAI_API_KEY;
+			expect(() => new ChatGptProvider()).toThrow("OPENAI_API_KEY environment variable is not set.");
+		});
 
-      expect(llmUtils.hashPrompt).toHaveBeenCalledWith(MOCK_PROMPT);
-      expect(llmUtils.loadCache).not.toHaveBeenCalled();
-      expect(mockCreateChatCompletion).toHaveBeenCalledTimes(1);
-      expect(llmUtils.saveCache).not.toHaveBeenCalled();
-      expect(llmUtils.logInteraction).toHaveBeenCalledWith(MOCK_PROMPT, MOCK_RESPONSE_TEXT);
-    });
+		test("should not throw an error if OPENAI_API_KEY is set", () => {
+			process.env.OPENAI_API_KEY = MOCK_API_KEY;
+			expect(() => new ChatGptProvider()).not.toThrow();
+			expect(MockedOpenAIConstructor).toHaveBeenCalledWith({ apiKey: MOCK_API_KEY });
+		});
+	});
 
-    test('cache hit scenario (useCache=true)', async () => {
-      (llmUtils.loadCache as jest.Mock).mockResolvedValue({ [MOCK_PROMPT_HASH]: MOCK_RESPONSE_TEXT });
+	describe("generate method", () => {
+		beforeEach(() => {
+			process.env.OPENAI_API_KEY = MOCK_API_KEY;
+		});
 
-      const provider = new ChatGptProvider();
-      const options: LlmOptions = { useCache: true };
-      const response = await provider.generate(MOCK_PROMPT, options);
+		test("should successfully generate text with cache miss", async () => {
+			const provider = new ChatGptProvider();
+			const options: LlmOptions = { useCache: true };
+			const response = await provider.generate(MOCK_PROMPT, options);
 
-      expect(llmUtils.hashPrompt).toHaveBeenCalledWith(MOCK_PROMPT);
-      expect(llmUtils.loadCache).toHaveBeenCalledTimes(1);
-      expect(mockCreateChatCompletion).not.toHaveBeenCalled();
-      expect(llmUtils.saveCache).not.toHaveBeenCalled();
-      expect(llmUtils.logInteraction).toHaveBeenCalledWith(MOCK_PROMPT, `[CACHE HIT] ${MOCK_RESPONSE_TEXT}`);
-      expect(response).toBe(MOCK_RESPONSE_TEXT);
-    });
+			// Verify core functionality
+			expect(llmUtils.hashPrompt).toHaveBeenCalledWith(MOCK_PROMPT);
+			expect(llmUtils.loadCache).toHaveBeenCalledTimes(2); // Called twice as per implementation
+			expect(mockCreateChatCompletion).toHaveBeenCalledWith({
+				messages: [{ role: "user", content: MOCK_PROMPT }],
+				model: "gpt-3.5-turbo",
+			});
+			expect(llmUtils.saveCache).toHaveBeenCalledWith({ [MOCK_PROMPT_HASH]: MOCK_RESPONSE_TEXT });
+			expect(llmUtils.logInteraction).toHaveBeenCalledWith(MOCK_PROMPT, MOCK_RESPONSE_TEXT);
+			expect(response).toBe(MOCK_RESPONSE_TEXT);
 
-    test('should use options.modelName when provided', async () => {
-      const customModelName = 'gpt-4-custom';
-      (llmUtils.loadCache as jest.Mock).mockResolvedValue({}); // Cache miss
+			// Verify console methods were called (even though we're suppressing output)
+			expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("Cache MISS for prompt hash"));
+			expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("Calling LLM (Model: gpt-3.5-turbo)"));
+		});
 
-      const provider = new ChatGptProvider();
-      const options: LlmOptions = { useCache: true, modelName: customModelName };
-      await provider.generate(MOCK_PROMPT, options);
+		test("should successfully generate text without cache", async () => {
+			const provider = new ChatGptProvider();
+			const options: LlmOptions = { useCache: false };
+			const response = await provider.generate(MOCK_PROMPT, options);
 
-      expect(mockCreateChatCompletion).toHaveBeenCalledWith(expect.objectContaining({ model: customModelName }));
-    });
-    
-    test('should use default modelName if options.modelName is not provided', async () => {
-      (llmUtils.loadCache as jest.Mock).mockResolvedValue({}); // Cache miss
-      process.env.OPENAI_MODEL = 'env-openai-model'; // Test environment variable for default
+			expect(llmUtils.hashPrompt).toHaveBeenCalledWith(MOCK_PROMPT);
+			expect(llmUtils.loadCache).not.toHaveBeenCalled();
+			expect(mockCreateChatCompletion).toHaveBeenCalledTimes(1);
+			expect(llmUtils.saveCache).not.toHaveBeenCalled();
+			expect(llmUtils.logInteraction).toHaveBeenCalledWith(MOCK_PROMPT, MOCK_RESPONSE_TEXT);
+			expect(response).toBe(MOCK_RESPONSE_TEXT);
+		});
 
-      const provider = new ChatGptProvider(); // Re-instantiate to pick up env var
-      const options: LlmOptions = { useCache: true };
-      await provider.generate(MOCK_PROMPT, options);
-      
-      expect(mockCreateChatCompletion).toHaveBeenCalledWith(expect.objectContaining({ model: 'env-openai-model' }));
-      
-      delete process.env.OPENAI_MODEL; // clean up
-    });
+		test("should handle cache hit scenario", async () => {
+			// Override the default empty cache for this test
+			(llmUtils.loadCache as jest.Mock).mockResolvedValue({ [MOCK_PROMPT_HASH]: MOCK_RESPONSE_TEXT });
 
-    test('should use "gpt-3.5-turbo" if options.modelName and process.env.OPENAI_MODEL are not provided', async () => {
-        (llmUtils.loadCache as jest.Mock).mockResolvedValue({}); // Cache miss
-        delete process.env.OPENAI_MODEL; // Ensure env var is not set
-  
-        const provider = new ChatGptProvider(); // Re-instantiate
-        const options: LlmOptions = { useCache: true };
-        await provider.generate(MOCK_PROMPT, options);
-        
-        expect(mockCreateChatCompletion).toHaveBeenCalledWith(expect.objectContaining({ model: 'gpt-3.5-turbo' }));
-    });
-    
-    test('API error handling', async () => {
-      const errorMessage = 'OpenAI API Error';
-      mockCreateChatCompletion.mockRejectedValue(new Error(errorMessage));
-      (llmUtils.loadCache as jest.Mock).mockResolvedValue({}); // Cache miss
+			const provider = new ChatGptProvider();
+			const options: LlmOptions = { useCache: true };
+			const response = await provider.generate(MOCK_PROMPT, options);
 
-      const provider = new ChatGptProvider();
-      const options: LlmOptions = { useCache: true };
+			expect(llmUtils.hashPrompt).toHaveBeenCalledWith(MOCK_PROMPT);
+			expect(llmUtils.loadCache).toHaveBeenCalledTimes(1);
+			expect(mockCreateChatCompletion).not.toHaveBeenCalled();
+			expect(llmUtils.saveCache).not.toHaveBeenCalled();
+			expect(llmUtils.logInteraction).toHaveBeenCalledWith(MOCK_PROMPT, `[CACHE HIT] ${MOCK_RESPONSE_TEXT}`);
+			expect(response).toBe(MOCK_RESPONSE_TEXT);
 
-      await expect(provider.generate(MOCK_PROMPT, options)).rejects.toThrow(expect.stringContaining('ChatGPT LLM API call failed'));
-      
-      expect(llmUtils.logInteraction).toHaveBeenCalledWith(MOCK_PROMPT, expect.any(Error));
-      const loggedError = (llmUtils.logInteraction as jest.Mock).mock.calls[0][1] as Error;
-      expect(loggedError.message).toContain('ChatGPT LLM API call failed');
-      expect(loggedError.message).toContain(errorMessage);
-    });
+			expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("Cache HIT for prompt hash"));
+		});
 
-    test('API error handling with OpenAI specific error structure', async () => {
-        const openAIErrorMessage = 'Invalid API key.';
-        const apiError = { // Simulate OpenAI error structure
-          response: { 
-            data: { 
-              error: { message: openAIErrorMessage } 
-            } 
-          }
-        };
-        mockCreateChatCompletion.mockRejectedValue(apiError);
-        (llmUtils.loadCache as jest.Mock).mockResolvedValue({});
-  
-        const provider = new ChatGptProvider();
-        await expect(provider.generate(MOCK_PROMPT, { useCache: true })).rejects.toThrow(expect.stringContaining(openAIErrorMessage));
-        
-        expect(llmUtils.logInteraction).toHaveBeenCalledWith(MOCK_PROMPT, expect.any(Error));
-        const loggedError = (llmUtils.logInteraction as jest.Mock).mock.calls[0][1] as Error;
-        expect(loggedError.message).toContain(openAIErrorMessage);
-    });
+		test("should use custom model name when provided", async () => {
+			const customModelName = "gpt-4-custom";
 
-    test('should throw error if API response is invalid (no choices)', async () => {
-      mockCreateChatCompletion.mockResolvedValue({ choices: [] }); // Invalid: empty choices
-      (llmUtils.loadCache as jest.Mock).mockResolvedValue({});
+			const provider = new ChatGptProvider();
+			const options: LlmOptions = { useCache: true, modelName: customModelName };
+			await provider.generate(MOCK_PROMPT, options);
 
-      const provider = new ChatGptProvider();
-      await expect(provider.generate(MOCK_PROMPT, { useCache: true })).rejects.toThrow("Invalid response structure from OpenAI API.");
-    });
+			expect(mockCreateChatCompletion).toHaveBeenCalledWith(expect.objectContaining({ model: customModelName }));
+		});
 
-    test('should throw error if API response is invalid (null content)', async () => {
-      mockCreateChatCompletion.mockResolvedValue({ choices: [{ message: { content: null } }] });
-      (llmUtils.loadCache as jest.Mock).mockResolvedValue({});
-      
-      const provider = new ChatGptProvider();
-      await expect(provider.generate(MOCK_PROMPT, { useCache: true })).rejects.toThrow("Received null or undefined content from OpenAI API.");
-    });
-  });
+		test("should use environment OPENAI_MODEL when available", async () => {
+			process.env.OPENAI_MODEL = "env-openai-model";
+
+			const provider = new ChatGptProvider();
+			const options: LlmOptions = { useCache: true };
+			await provider.generate(MOCK_PROMPT, options);
+
+			expect(mockCreateChatCompletion).toHaveBeenCalledWith(
+				expect.objectContaining({ model: "env-openai-model" })
+			);
+		});
+
+		test("should fallback to default model when no model specified", async () => {
+			const provider = new ChatGptProvider();
+			const options: LlmOptions = { useCache: true };
+			await provider.generate(MOCK_PROMPT, options);
+
+			expect(mockCreateChatCompletion).toHaveBeenCalledWith(expect.objectContaining({ model: "gpt-3.5-turbo" }));
+		});
+
+		test("should handle generic API errors", async () => {
+			const errorMessage = "OpenAI API Error";
+			mockCreateChatCompletion.mockRejectedValue(new Error(errorMessage));
+
+			const provider = new ChatGptProvider();
+			const options: LlmOptions = { useCache: true };
+
+			await expect(provider.generate(MOCK_PROMPT, options)).rejects.toThrow(
+				"ChatGPT LLM API call failed (Model: gpt-3.5-turbo): OpenAI API Error"
+			);
+
+			expect(llmUtils.logInteraction).toHaveBeenCalledWith(MOCK_PROMPT, expect.any(Error));
+			expect(consoleErrorSpy).toHaveBeenCalledWith(
+				expect.stringContaining("ChatGPT LLM API call failed"),
+				expect.any(Error)
+			);
+		});
+
+		test("should handle OpenAI specific error structures", async () => {
+			const openAIErrorMessage = "Invalid API key.";
+			const apiError = {
+				response: {
+					data: {
+						error: { message: openAIErrorMessage },
+					},
+				},
+			};
+			mockCreateChatCompletion.mockRejectedValue(apiError);
+
+			const provider = new ChatGptProvider();
+
+			await expect(provider.generate(MOCK_PROMPT, { useCache: true })).rejects.toThrow(
+				"ChatGPT LLM API call failed (Model: gpt-3.5-turbo): Invalid API key."
+			);
+
+			expect(llmUtils.logInteraction).toHaveBeenCalledWith(MOCK_PROMPT, expect.any(Error));
+		});
+
+		test("should handle invalid API response with no choices", async () => {
+			mockCreateChatCompletion.mockResolvedValue({ choices: [] });
+
+			const provider = new ChatGptProvider();
+			await expect(provider.generate(MOCK_PROMPT, { useCache: true })).rejects.toThrow(
+				"Invalid response structure from OpenAI API."
+			);
+		});
+
+		test("should handle invalid API response with null content", async () => {
+			mockCreateChatCompletion.mockResolvedValue({
+				choices: [{ message: { content: null } }],
+			});
+
+			const provider = new ChatGptProvider();
+			await expect(provider.generate(MOCK_PROMPT, { useCache: true })).rejects.toThrow(
+				"Received null or undefined content from OpenAI API."
+			);
+		});
+	});
 });
