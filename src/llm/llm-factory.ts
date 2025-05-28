@@ -3,7 +3,7 @@ import { GeminiProvider } from "./gemini-provider";
 import { ChatGptProvider } from "./chatgpt-provider";
 import { ClaudeProvider } from "./claude-provider";
 
-const DEFAULT_PROVIDER_NAME = 'gemini';
+const DEFAULT_PROVIDER_NAME = "gemini";
 
 /**
  * @function getLlmProvider
@@ -17,16 +17,20 @@ const DEFAULT_PROVIDER_NAME = 'gemini';
  * @throws {Error} If the providerName is not recognized.
  */
 export function getLlmProvider(providerName?: string): LlmProvider {
-  const name = (providerName || DEFAULT_PROVIDER_NAME).toLowerCase();
+	const name = (providerName || DEFAULT_PROVIDER_NAME).toLowerCase();
 
-  switch (name) {
-    case 'gemini':
-      return new GeminiProvider();
-    case 'chatgpt':
-      return new ChatGptProvider();
-    case 'claude':
-      return new ClaudeProvider();
-    default:
-      throw new Error(`Unsupported LLM provider: ${providerName}. Supported providers are 'gemini', 'chatgpt', 'claude'.`);
-  }
+	console.log("🚀 ~ :22 ~ getLlmProvider ~ name:", name);
+
+	switch (name) {
+		case "gemini":
+			return new GeminiProvider();
+		case "chatgpt":
+			return new ChatGptProvider();
+		case "claude":
+			return new ClaudeProvider();
+		default:
+			throw new Error(
+				`Unsupported LLM provider: ${providerName}. Supported providers are 'gemini', 'chatgpt', 'claude'.`
+			);
+	}
 }

@@ -1,12 +1,12 @@
-import fs from 'fs/promises';
-import path from 'path';
-import crypto from 'crypto';
-import { getLlmProvider } from '../llm/llm-factory';
-import { LlmOptions } from '../llm/llm-provider';
+import fs from "fs/promises";
+import path from "path";
+import crypto from "crypto";
+import { getLlmProvider } from "../llm/llm-factory";
+import { LlmOptions } from "../llm/llm-provider";
 
-const CACHE_DIR = path.join(process.cwd(), '.cache');
-const LLM_CACHE_FILE = path.join(CACHE_DIR, 'llm_cache.json');
-const LLM_LOG_FILE = path.join(CACHE_DIR, 'llm_interactions.log');
+const CACHE_DIR = path.join(process.cwd(), ".cache");
+const LLM_CACHE_FILE = path.join(CACHE_DIR, "llm_cache.json");
+const LLM_LOG_FILE = path.join(CACHE_DIR, "llm_interactions.log");
 
 /**
  * @interface LlmCache
@@ -14,7 +14,7 @@ const LLM_LOG_FILE = path.join(CACHE_DIR, 'llm_interactions.log');
  * @internal
  */
 interface LlmCache {
-  [promptHash: string]: string;
+	[promptHash: string]: string;
 }
 
 /**
@@ -25,13 +25,13 @@ interface LlmCache {
  * @returns {Promise<void>}
  */
 export async function ensureCacheDirExists(): Promise<void> {
-  try {
-    await fs.mkdir(CACHE_DIR, { recursive: true });
-  } catch (error: any) {
-    if (error.code !== 'EEXIST') {
-      console.warn(`Could not create cache directory ${CACHE_DIR}:`, error);
-    }
-  }
+	try {
+		await fs.mkdir(CACHE_DIR, { recursive: true });
+	} catch (error: any) {
+		if (error.code !== "EEXIST") {
+			console.warn(`Could not create cache directory ${CACHE_DIR}:`, error);
+		}
+	}
 }
 
 /**
@@ -42,17 +42,17 @@ export async function ensureCacheDirExists(): Promise<void> {
  * @returns {Promise<LlmCache>} The loaded cache.
  */
 export async function loadCache(): Promise<LlmCache> {
-  await ensureCacheDirExists();
-  try {
-    const data = await fs.readFile(LLM_CACHE_FILE, 'utf-8');
-    return JSON.parse(data) as LlmCache;
-  } catch (error: any) {
-    if (error.code === 'ENOENT') {
-      return {}; // Cache file doesn't exist yet
-    }
-    console.warn('Error loading LLM cache:', error);
-    return {}; // Return empty cache on other errors
-  }
+	await ensureCacheDirExists();
+	try {
+		const data = await fs.readFile(LLM_CACHE_FILE, "utf-8");
+		return JSON.parse(data) as LlmCache;
+	} catch (error: any) {
+		if (error.code === "ENOENT") {
+			return {}; // Cache file doesn't exist yet
+		}
+		console.warn("Error loading LLM cache:", error);
+		return {}; // Return empty cache on other errors
+	}
 }
 
 /**
@@ -64,12 +64,12 @@ export async function loadCache(): Promise<LlmCache> {
  * @returns {Promise<void>}
  */
 export async function saveCache(cache: LlmCache): Promise<void> {
-  await ensureCacheDirExists();
-  try {
-    await fs.writeFile(LLM_CACHE_FILE, JSON.stringify(cache, null, 2), 'utf-8');
-  } catch (error) {
-    console.warn('Error saving LLM cache:', error);
-  }
+	await ensureCacheDirExists();
+	try {
+		await fs.writeFile(LLM_CACHE_FILE, JSON.stringify(cache, null, 2), "utf-8");
+	} catch (error) {
+		console.warn("Error saving LLM cache:", error);
+	}
 }
 
 /**
@@ -82,14 +82,16 @@ export async function saveCache(cache: LlmCache): Promise<void> {
  * @returns {Promise<void>}
  */
 export async function logInteraction(prompt: string, response: string | Error): Promise<void> {
-  await ensureCacheDirExists();
-  const timestamp = new Date().toISOString();
-  const logEntry = `[${timestamp}]\nPROMPT:\n${prompt}\nRESPONSE:\n${response instanceof Error ? response.stack : response}\n---\n`;
-  try {
-    await fs.appendFile(LLM_LOG_FILE, logEntry);
-  } catch (error) {
-    console.warn('Error writing to LLM log file:', error);
-  }
+	await ensureCacheDirExists();
+	const timestamp = new Date().toISOString();
+	const logEntry = `[${timestamp}]\nPROMPT:\n${prompt}\nRESPONSE:\n${
+		response instanceof Error ? response.stack : response
+	}\n---\n`;
+	try {
+		await fs.appendFile(LLM_LOG_FILE, logEntry);
+	} catch (error) {
+		console.warn("Error writing to LLM log file:", error);
+	}
 }
 
 /**
@@ -100,20 +102,19 @@ export async function logInteraction(prompt: string, response: string | Error): 
  * @returns {string} The hexadecimal string of the hash.
  */
 export function hashPrompt(prompt: string): string {
-  return crypto.createHash('sha256').update(prompt).digest('hex');
+	return crypto.createHash("sha256").update(prompt).digest("hex");
 }
 
 /**
  * @interface CallLlmArgs
- * @description Arguments for the callLlm function, extending LlmOptions
- * to include provider selection.
+ * @extends LlmOptions
+ * @description Arguments for the callLlm function, extending LlmOptions to include provider selection.
+ * @property {string} [providerName] - The name of the LLM provider to use (e.g., 'gemini', 'chatgpt', 'claude').
+ * Inherits all properties from {@link LlmOptions}
  */
 export interface CallLlmArgs extends LlmOptions {
-  /**
-   * @property {string} [providerName] - The name of the LLM provider to use (e.g., 'gemini', 'chatgpt', 'claude').
-   * Defaults to 'gemini' if not specified.
-   */
-  providerName?: string;
+	// Defaults to 'gemini' if not specified.
+	providerName?: string;
 }
 
 /**
@@ -129,24 +130,25 @@ export interface CallLlmArgs extends LlmOptions {
  * @throws {Error} If the specified provider is not supported, if the provider's API key is missing,
  * or if the LLM API call fails.
  */
-export async function callLlm(
-  prompt: string,
-  options?: CallLlmArgs
-): Promise<string> {
-  try {
-    // Get the appropriate provider using the factory
-    // The factory defaults to 'gemini' if options.providerName is undefined
-    const provider = getLlmProvider(options?.providerName);
+export async function callLlm(prompt: string, options?: CallLlmArgs): Promise<string> {
+	console.log("🚀 ~ :135 ~ callLlm ~ options:", options);
 
-    // Delegate the generation task to the provider.
-    // The provider itself will handle caching and logging based on the options.
-    return await provider.generate(prompt, options);
-  } catch (error: any) {
-    // Log the error at this top level as well, in case provider-level logging fails or for an overview.
-    // However, primary logging responsibility is with the provider.
-    console.error(`Error in callLlm: ${error.message}`, error.stack);
-    // Re-throw the error so the caller can handle it.
-    // The error should ideally be an instance of Error from the provider or factory.
-    throw error; 
-  }
+	try {
+		// Get the appropriate provider using the factory
+		// The factory defaults to 'gemini' if options.providerName is undefined
+		const provider = getLlmProvider(options?.providerName);
+
+		console.log("🚀 ~ :141 ~ provider:", provider);
+
+		// Delegate the generation task to the provider.
+		// The provider itself will handle caching and logging based on the options.
+		return await provider.generate(prompt, options);
+	} catch (error: any) {
+		// Log the error at this top level as well, in case provider-level logging fails or for an overview.
+		// However, primary logging responsibility is with the provider.
+		console.error(`Error in callLlm: ${error.message}`, error.stack);
+		// Re-throw the error so the caller can handle it.
+		// The error should ideally be an instance of Error from the provider or factory.
+		throw error;
+	}
 }

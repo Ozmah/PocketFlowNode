@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express, { Request, Response } from "express";
+import { GoogleGenAI } from "@google/genai";
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -21,40 +22,58 @@ const configuredProviders: string[] = [];
 const missingKeys: string[] = [];
 
 if (process.env.GEMINI_API_KEY) {
-  configuredProviders.push("Gemini");
+	configuredProviders.push("Gemini");
 } else {
-  missingKeys.push("GEMINI_API_KEY (used by default 'gemini' provider)");
+	missingKeys.push("GEMINI_API_KEY (used by default 'gemini' provider)");
 }
 
 if (process.env.OPENAI_API_KEY) {
-  configuredProviders.push("OpenAI/ChatGPT");
+	configuredProviders.push("OpenAI/ChatGPT");
 } else {
-  missingKeys.push("OPENAI_API_KEY (used by 'chatgpt' provider)");
+	missingKeys.push("OPENAI_API_KEY (used by 'chatgpt' provider)");
 }
 
 if (process.env.ANTHROPIC_API_KEY) {
-  configuredProviders.push("Anthropic/Claude");
+	configuredProviders.push("Anthropic/Claude");
 } else {
-  missingKeys.push("ANTHROPIC_API_KEY (used by 'claude' provider)");
+	missingKeys.push("ANTHROPIC_API_KEY (used by 'claude' provider)");
 }
 
 if (configuredProviders.length > 0) {
-  console.info(`${LOG_PREFIX} Configured LLM providers based on API keys: ${configuredProviders.join(", ")}.`);
-  if (missingKeys.length > 0) {
-    console.warn(`${LOG_PREFIX} Optional LLM API keys not found: ${missingKeys.join(", ")}. Calls to these providers will fail.`);
-  }
+	console.info(`${LOG_PREFIX} Configured LLM providers based on API keys: ${configuredProviders.join(", ")}.`);
+	if (missingKeys.length > 0) {
+		console.warn(
+			`${LOG_PREFIX} Optional LLM API keys not found: ${missingKeys.join(
+				", "
+			)}. Calls to these providers will fail.`
+		);
+	}
 } else {
-  console.error(
-    `${LOG_PREFIX} CRITICAL: No LLM API keys found in environment variables (checked for GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY). ` +
-    "At least one LLM provider must be configured for the application to run."
-  );
-  process.exit(1);
+	console.error(
+		`${LOG_PREFIX} CRITICAL: No LLM API keys found in environment variables (checked for GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY). ` +
+			"At least one LLM provider must be configured for the application to run."
+	);
+	process.exit(1);
 }
 
 app.use(express.json());
 
-app.get("/ping", (req: Request, res: Response) => {
-	res.send("pong");
+app.post("/ping", async (req: Request, res: Response) => {
+	const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+	const response = await ai.models.generateContentStream({
+		model: "gemini-2.0-flash",
+		contents: "¿La hoja santa es tóxica?",
+	});
+
+	for await (const chunk of response) {
+		console.log(chunk.text);
+	}
+
+	res.status(200).json({
+		message: "Pong",
+		// error: error.message, // Avoid sending detailed error messages to client in production
+		// stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+	});
 });
 
 interface GenerateTutorialRequestBody {
@@ -68,20 +87,20 @@ interface GenerateTutorialRequestBody {
 	useCache?: boolean;
 	maxAbstractions?: number;
 	/**
-   * @property {string} [llmProvider] - The name of the LLM provider to use (e.g., 'gemini', 'chatgpt', 'claude').
-   * Defaults to 'gemini' if not specified (this default is handled by the LLM factory).
-   */
+	 * @property {string} [llmProvider] - The name of the LLM provider to use (e.g., 'gemini', 'chatgpt', 'claude').
+	 * Defaults to 'gemini' if not specified (this default is handled by the LLM factory).
+	 */
 	llmProvider?: string;
-  /**
-   * @property {string} [llmModelName] - The specific model name for the selected LLM provider.
-   * If not provided, the default model for that provider will be used.
-   */
+	/**
+	 * @property {string} [llmModelName] - The specific model name for the selected LLM provider.
+	 * If not provided, the default model for that provider will be used.
+	 */
 	llmModelName?: string;
-  /**
-   * @property {Record<string, any>} [llmOptions] - Additional options for the LLM provider.
-   * These are provider-specific and are passed through.
-   */
-  llmOptions?: Record<string, any>; // For future flexibility
+	/**
+	 * @property {Record<string, any>} [llmOptions] - Additional options for the LLM provider.
+	 * These are provider-specific and are passed through.
+	 */
+	llmOptions?: Record<string, any>; // For future flexibility
 }
 
 app.post("/generate-tutorial", async (req: Request, res: Response) => {
@@ -149,29 +168,31 @@ app.post("/generate-tutorial", async (req: Request, res: Response) => {
 	) {
 		return res.status(400).send("maxAbstractions must be a positive integer if provided.");
 	}
-  // LLM Provider and Model validations
-  if (
-    requestBody.llmProvider !== undefined &&
-    (typeof requestBody.llmProvider !== "string" || requestBody.llmProvider.trim() === "")
-  ) {
-    return res.status(400).send("llmProvider must be a non-empty string if provided.");
-  }
-  if (
-    requestBody.llmModelName !== undefined &&
-    (typeof requestBody.llmModelName !== "string" || requestBody.llmModelName.trim() === "")
-  ) {
-    return res.status(400).send("llmModelName must be a non-empty string if provided.");
-  }
-  if (
-    requestBody.llmOptions !== undefined &&
-    (typeof requestBody.llmOptions !== 'object' || Array.isArray(requestBody.llmOptions) || requestBody.llmOptions === null)
-  ) {
-    return res.status(400).send("llmOptions must be an object if provided.");
-  }
+	// LLM Provider and Model validations
+	if (
+		requestBody.llmProvider !== undefined &&
+		(typeof requestBody.llmProvider !== "string" || requestBody.llmProvider.trim() === "")
+	) {
+		return res.status(400).send("llmProvider must be a non-empty string if provided.");
+	}
+	if (
+		requestBody.llmModelName !== undefined &&
+		(typeof requestBody.llmModelName !== "string" || requestBody.llmModelName.trim() === "")
+	) {
+		return res.status(400).send("llmModelName must be a non-empty string if provided.");
+	}
+	if (
+		requestBody.llmOptions !== undefined &&
+		(typeof requestBody.llmOptions !== "object" ||
+			Array.isArray(requestBody.llmOptions) ||
+			requestBody.llmOptions === null)
+	) {
+		return res.status(400).send("llmOptions must be an object if provided.");
+	}
 	// --- End of Input Validation ---
 
-	// Extract LLM options from request body
-	const { llmProvider, llmModelName, llmOptions: providerSpecificOptions } = requestBody;
+	console.log("🚀 ~ :197 ~ app.post ~ requestBody:", requestBody);
+	console.log("🚀 ~ :198 ~ app.post ~ llmModelName:", requestBody.llmModelName);
 
 	const sharedData: SharedData = {
 		repoUrl: requestBody.repoUrl,
@@ -183,13 +204,16 @@ app.post("/generate-tutorial", async (req: Request, res: Response) => {
 		language: requestBody.language !== undefined ? requestBody.language : "english",
 		useCache: requestBody.useCache !== undefined ? requestBody.useCache : true,
 		maxAbstractions: requestBody.maxAbstractions !== undefined ? requestBody.maxAbstractions : 15,
-		// Note: llmProvider, llmModelName, llmOptions are not directly part of SharedData type for now,
-		// they are passed to the individual core function options.
+		llmProvider: requestBody.llmProvider ?? requestBody.llmProvider,
+		llmModelName: requestBody.llmModelName ?? requestBody.llmModelName,
+		// Note: llmOptions are not directly part of SharedData type for now,
 	};
 
+	console.log("🚀 ~ :212 ~ app.post ~ sharedData:", sharedData);
+
 	console.log(`${LOG_PREFIX} Starting tutorial generation for project: ${sharedData.projectName}`);
-	if (llmProvider) console.log(`${LOG_PREFIX} Using LLM Provider: ${llmProvider}`);
-	if (llmModelName) console.log(`${LOG_PREFIX} Using LLM Model: ${llmModelName}`);
+	if (sharedData.llmProvider) console.log(`${LOG_PREFIX} Using LLM Provider: ${sharedData.llmProvider}`);
+	if (sharedData.llmModelName) console.log(`${LOG_PREFIX} Using LLM Model: ${sharedData.llmModelName}`);
 
 	try {
 		// 1. Fetch Repository Files
@@ -220,8 +244,8 @@ app.post("/generate-tutorial", async (req: Request, res: Response) => {
 			language: sharedData.language,
 			useCache: sharedData.useCache,
 			maxAbstractions: sharedData.maxAbstractions,
-			providerName: llmProvider, // Pass from request
-			llmModelName: llmModelName,   // Pass from request
+			providerName: sharedData.llmProvider, // Pass from request
+			llmModelName: sharedData.llmModelName, // Pass from request
 			// ...providerSpecificOptions could be spread here if IdentifyAbstractionsOptions supports it
 		};
 		const identifiedAbstractions: Abstraction[] = await identifyAbstractions(
